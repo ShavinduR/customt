@@ -36,7 +36,4 @@ services:
         value: 800
       - key: MAX_UPLOAD_MB
         value: 2
-    disk:
-      name: customt-uploads   # keeps uploaded logos across deploys (paid plans only)
-      mountPath: /opt/render/project/src/backend/uploads
-      sizeGB: 1
+
