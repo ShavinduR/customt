@@ -139,7 +139,7 @@ async function start() {
 if (require.main === module) {
   start().catch((err) => {
     // eslint-disable-next-line no-console
-    console.error('[server] Failed to start:', err);
+    console.error('[server] Failed to start:', err.isDbConnectionError ? `could not connect to MongoDB\n${err.message}` : err);
     process.exit(1);
   });
 }
