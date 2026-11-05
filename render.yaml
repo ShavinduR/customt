@@ -6,7 +6,7 @@ services:
     name: customt-api
     runtime: node
     rootDir: backend
-    plan: starter            # use "free" for demos (sleeps after 15 min idle; first request is slow)
+    plan: free               # sleeps after 15 min idle (first request ~30-60 s); "starter" keeps it always on
     buildCommand: npm ci --omit=dev
     startCommand: npm start
     healthCheckPath: /api/health
