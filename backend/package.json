@@ -9,7 +9,8 @@
     "dev": "nodemon server.js",
     "seed": "node scripts/seed.js",
     "seed:admin": "node scripts/seed.js --admin-only",
-    "test": "node --test"
+    "test": "node --test",
+    "test:e2e": "node --test --test-force-exit --test-timeout=120000 tests/e2e/fullFlow.e2e.js"
   },
   "engines": {
     "node": ">=18.18.0"
@@ -37,6 +38,7 @@
     "socket.io": "^4.8.1"
   },
   "devDependencies": {
-    "nodemon": "^3.1.9"
+    "nodemon": "^3.1.9",
+    "socket.io-client": "^4.8.1"
   }
 }
