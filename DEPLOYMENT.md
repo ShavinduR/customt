@@ -47,7 +47,7 @@ git push -u origin main
 | `CLIENT_URL` | your frontend URL from step 4, e.g. `https://customt.vercel.app` (no trailing slash; comma-separate several) |
 | `PUBLIC_API_URL` | the Render URL, e.g. `https://customt-api.onrender.com` |
 
-`JWT_SECRET` is generated automatically. On the **free** plan, delete the `disk:` block in `render.yaml`, because persistent disks need a paid plan (see *Uploads* below).
+`JWT_SECRET` is generated automatically. The blueprint uses Render's **free** plan, with no persistent disk, so uploaded logos are lost on each redeploy (see *Uploads* below). To stay always on, change `plan: free` to `plan: starter`.
 
 **Option B: manual web service.** *New → Web Service*. Use these settings: root directory `backend`, build command `npm ci --omit=dev`, start command `npm start`, health check path `/api/health`. Then add the environment variables from `backend/.env.example`.
 

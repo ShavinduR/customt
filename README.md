@@ -67,7 +67,22 @@ Set `AUCTION_DURATION_MINUTES=5` in `backend/.env` so auctions close during the 
 cd backend && npm test
 ```
 
-The unit tests cover the scoring formula, tie-breaks, the CV diagnostic, the EWMA and the RFQ calculator.
+Unit tests cover the scoring formula, tie-breaks, the CV diagnostic, the EWMA and the RFQ calculator.
+
+```bash
+cd backend && E2E_MONGO_URI=mongodb://localhost:27017/customt_e2e npm run test:e2e
+```
+
+The **end-to-end test** (`backend/tests/e2e/fullFlow.e2e.js`) boots the real API and Socket.IO server against MongoDB and walks the whole lifecycle with a buyer, four vendors and an admin:
+- PERA qualification, event and participant locks; the CPAPO spec lock
+- live socket bidding with the exact scoring formula, and checks that vendors never receive a competitor's price, identity, score or the buyer's PIN
+- re-bid rules, the price-variance flag and soft-close extension
+- award, declined and approved payments, the 30% / 70% escrow milestones, wrong and correct O2O PINs, and the trust EWMA
+- a hostile dispute (softened for the vendor) settled 60/40 by the admin, auction expiry, and the analytics totals
+
+It **empties every collection** in the target database first, so it refuses any database whose name doesn't contain `test` or `e2e`.
+
+**CI:** `.github/workflows/ci.yml` runs the unit tests, the end-to-end test against a MongoDB 7 service container, and the frontend production build on every push.
 
 ## Deployment
 
