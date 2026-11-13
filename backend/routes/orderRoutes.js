@@ -4,6 +4,7 @@ const { protect, authorize } = require('../middleware/auth');
 const { ROLES } = require('../config/constants');
 const { parsePagination } = require('../utils/helpers');
 const orderService = require('../services/orderService');
+const chatService = require('../services/chatService');
 
 const router = express.Router();
 router.use(protect);
@@ -126,6 +127,33 @@ router.post(
   asyncHandler(async (req, res) => {
     const note = await orderService.addDisputeNote(req.user, req.params.id, req.body.message);
     res.status(201).json({ success: true, note });
+  })
+);
+
+/** GET /api/orders/:id/messages - chat history (buyer, winning vendor, or admin with originals) */
+router.get(
+  '/:id/messages',
+  asyncHandler(async (req, res) => {
+    res.json({ success: true, ...(await chatService.listMessages(req.params.id, req.user)) });
+  })
+);
+
+/** POST /api/orders/:id/messages { body } - REST fallback for chat:send (contact details are filtered) */
+router.post(
+  '/:id/messages',
+  authorize(ROLES.BUYER, ROLES.VENDOR),
+  asyncHandler(async (req, res) => {
+    const result = await chatService.sendMessage(req.user, req.params.id, req.body.body);
+    res.status(201).json({ success: true, ...result });
+  })
+);
+
+/** POST /api/orders/:id/messages/read - mark the other party's messages as read */
+router.post(
+  '/:id/messages/read',
+  authorize(ROLES.BUYER, ROLES.VENDOR),
+  asyncHandler(async (req, res) => {
+    res.json({ success: true, ...(await chatService.markRead(req.user, req.params.id)) });
   })
 );
 

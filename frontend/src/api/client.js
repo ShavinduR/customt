@@ -70,6 +70,8 @@ export const authApi = {
   me: () => unwrap(http.get('/auth/me')),
   updateMe: (payload) => unwrap(http.patch('/auth/me', payload)),
   changePassword: (payload) => unwrap(http.patch('/auth/me/password', payload)),
+  forgotPassword: (email) => unwrap(http.post('/auth/forgot-password', { email }, { skipAuthRedirect: true })),
+  resetPassword: (token, password) => unwrap(http.post('/auth/reset-password', { token, password }, { skipAuthRedirect: true })),
 };
 
 export const metaApi = {
@@ -111,6 +113,9 @@ export const orderApi = {
   addDisputeNote: (id, message) => unwrap(http.post(`/orders/${id}/dispute/notes`, { message })),
   updateProduction: (id, status, note) => unwrap(http.patch(`/orders/${id}/production`, { status, note })),
   verifyPin: (id, pin) => unwrap(http.post(`/orders/${id}/o2o/verify`, { pin })),
+  messages: (id) => unwrap(http.get(`/orders/${id}/messages`)),
+  sendMessage: (id, body) => unwrap(http.post(`/orders/${id}/messages`, { body })),
+  markMessagesRead: (id) => unwrap(http.post(`/orders/${id}/messages/read`)),
 };
 
 export const vendorApi = {
@@ -131,6 +136,7 @@ export const adminApi = {
   disputes: (state) => unwrap(http.get('/admin/disputes', { params: { state } })),
   resolveDispute: (id, payload) => unwrap(http.post(`/admin/orders/${id}/resolve`, payload)),
   analytics: () => unwrap(http.get('/admin/analytics')),
+  conversations: (params) => unwrap(http.get('/admin/conversations', { params })),
 };
 
 export default http;

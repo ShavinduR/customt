@@ -8,6 +8,8 @@ import OrderProgress from '../../components/orders/OrderProgress';
 import EscrowBreakdown from '../../components/orders/EscrowBreakdown';
 import DisputeThread from '../../components/orders/DisputeThread';
 import SpecSummary from '../../components/auction/SpecSummary';
+import ReceiptButton from '../../components/orders/ReceiptButton';
+import OrderChat from '../../components/chat/OrderChat';
 import { Alert, Badge, Button, Card, CardHeader, ErrorList, Field, Modal, PageHeader, PageLoader, StatusBadge, Textarea, TrustStars, cx } from '../../components/ui';
 import { formatDate, formatLKR, titleCase } from '../../utils/format';
 import { statusMeta } from '../../utils/status';
@@ -214,6 +216,8 @@ export default function AdminOrderDetail() {
             </Alert>
           )}
 
+          <OrderChat orderId={order._id} viewerRole="admin" compact />
+
           {order.disputeNotes?.length > 0 && (
             <Card>
               <CardHeader icon={MessagesSquare} title="Communication log" subtitle="All templated messages, including each party's private view" />
@@ -224,7 +228,7 @@ export default function AdminOrderDetail() {
           )}
 
           <Card>
-            <CardHeader icon={ShieldCheck} title="Escrow ledger" />
+            <CardHeader icon={ShieldCheck} title="Escrow ledger" action={<ReceiptButton order={order} />} />
             <div className="p-5">
               <EscrowBreakdown order={order} viewer="admin" />
             </div>

@@ -236,21 +236,28 @@ export function EmptyState({ icon: Icon, title, description, action }) {
 export function Modal({ open, onClose, title, subtitle, children, footer, size = 'md', dismissible = true }) {
   const titleId = useId();
   const panelRef = useRef(null);
+  // Callers usually pass an inline arrow (a new function on every render). Keeping it in a ref means
+  // typing in a field inside the dialog never re-runs the effects below, which used to steal focus.
+  const onCloseRef = useRef(onClose);
+  const dismissibleRef = useRef(dismissible);
+  onCloseRef.current = onClose;
+  dismissibleRef.current = dismissible;
 
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (e) => {
-      if (e.key === 'Escape' && dismissible) onClose?.();
+      if (e.key === 'Escape' && dismissibleRef.current) onCloseRef.current?.();
     };
     document.addEventListener('keydown', onKey);
     const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    panelRef.current?.focus();
+    // Move focus into the dialog once, when it opens, unless a field inside it (autoFocus) already has it.
+    if (panelRef.current && !panelRef.current.contains(document.activeElement)) panelRef.current.focus();
     return () => {
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = previous;
     };
-  }, [open, dismissible, onClose]);
+  }, [open]);
 
   if (!open) return null;
   const widths = { sm: 'max-w-md', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl' };

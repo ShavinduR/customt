@@ -10,9 +10,7 @@ import {
   Factory,
   Flag,
   History,
-  Mail,
   MessagesSquare,
-  Phone,
   ScanSearch,
   ShieldCheck,
   Star,
@@ -29,6 +27,8 @@ import O2OPanel from '../../components/orders/O2OPanel';
 import DisputeModal from '../../components/orders/DisputeModal';
 import DisputeThread from '../../components/orders/DisputeThread';
 import RatingModal from '../../components/orders/RatingModal';
+import ReceiptButton from '../../components/orders/ReceiptButton';
+import OrderChat from '../../components/chat/OrderChat';
 import SpecSummary from '../../components/auction/SpecSummary';
 import { Alert, Badge, Button, Card, CardHeader, ErrorList, Modal, PageHeader, PageLoader, StatusBadge, TrustStars } from '../../components/ui';
 import { formatDate, formatLKR, titleCase } from '../../utils/format';
@@ -196,11 +196,14 @@ export default function OrderDetail() {
                     </p>
                   </div>
                 </div>
-                {order.canRate && (
-                  <Button icon={Star} onClick={() => setModal('rate')}>
-                    Rate {vendorName}
-                  </Button>
-                )}
+                <div className="flex flex-wrap gap-2">
+                  <ReceiptButton order={order} size="md" />
+                  {order.canRate && (
+                    <Button icon={Star} onClick={() => setModal('rate')}>
+                      Rate {vendorName}
+                    </Button>
+                  )}
+                </div>
               </div>
               {order.buyerRating?.rating && (
                 <div className="mt-4 rounded-xl bg-slate-50 p-4">
@@ -221,6 +224,8 @@ export default function OrderDetail() {
           )}
           {order.orderStatus === 'CANCELLED' && <Alert tone="info" title="This order was cancelled before payment." />}
 
+          <OrderChat orderId={order._id} viewerRole="buyer" counterpartName={vendorName} />
+
           {showThread && (
             <Card>
               <CardHeader icon={MessagesSquare} title="Resolution centre" subtitle="Polite, structured communication mediated by CustomT" />
@@ -231,7 +236,7 @@ export default function OrderDetail() {
           )}
 
           <Card>
-            <CardHeader icon={ShieldCheck} title="Escrow" subtitle="Split-payment protection" />
+            <CardHeader icon={ShieldCheck} title="Escrow" subtitle="Split-payment protection" action={<ReceiptButton order={order} />} />
             <div className="p-5">
               <EscrowBreakdown order={order} />
             </div>
@@ -254,16 +259,10 @@ export default function OrderDetail() {
                   </Badge>
                 ))}
               </div>
-              {vendor.phone && (
-                <a href={`tel:${vendor.phone}`} className="flex items-center gap-2 text-slate-700 hover:text-brand-700">
-                  <Phone className="h-4 w-4 text-slate-400" /> {vendor.phone}
-                </a>
-              )}
-              {vendor.email && (
-                <a href={`mailto:${vendor.email}`} className="flex items-center gap-2 break-all text-slate-700 hover:text-brand-700">
-                  <Mail className="h-4 w-4 text-slate-400" /> {vendor.email}
-                </a>
-              )}
+              <p className="flex items-start gap-2 rounded-lg bg-slate-50 p-2.5 text-xs text-slate-600">
+                <MessagesSquare className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
+                Contact details stay private. Use the order chat to arrange the hand-over, so your escrow protection stays valid.
+              </p>
               <p className="flex items-center gap-2 text-slate-700">
                 <Clock className="h-4 w-4 text-slate-400" /> Lead time {order.leadTimeDays} days
               </p>

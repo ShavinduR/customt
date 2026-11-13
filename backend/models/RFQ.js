@@ -8,6 +8,7 @@ const {
   PRINT_PLACEMENTS,
   SIZES,
   MIN_ORDER_QUANTITY,
+  DESIGN,
 } = require('../config/constants');
 const ApiError = require('../utils/ApiError');
 
@@ -19,6 +20,32 @@ const sizeBreakdownSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const textLayerSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true },
+    side: { type: String, enum: DESIGN.SIDES, required: true },
+    text: { type: String, required: true, maxlength: DESIGN.TEXT_MAX },
+    font: { type: String, enum: DESIGN.FONTS, required: true },
+    size: { type: Number, min: DESIGN.SIZE_MIN, max: DESIGN.SIZE_MAX, required: true },
+    color: { type: String, required: true },
+    x: { type: Number, min: 0, max: 100, required: true },
+    y: { type: Number, min: 0, max: 100, required: true },
+  },
+  { _id: false }
+);
+
+const imageLayerSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true },
+    side: { type: String, enum: DESIGN.SIDES, required: true },
+    url: { type: String, required: true, maxlength: 500 },
+    x: { type: Number, min: 0, max: 100, required: true },
+    y: { type: Number, min: 0, max: 100, required: true },
+    scale: { type: Number, min: DESIGN.SCALE_MIN, max: DESIGN.SCALE_MAX, required: true },
+  },
+  { _id: false }
+);
+
 const designSpecsSchema = new mongoose.Schema(
   {
     garmentType: { type: String, enum: GARMENT_TYPES, required: true },
@@ -27,6 +54,9 @@ const designSpecsSchema = new mongoose.Schema(
     color: { type: String, required: true, match: /^#([0-9A-F]{3}|[0-9A-F]{6})$/i },
     printType: { type: String, enum: PRINT_TYPES, required: true },
     printPlacement: { type: String, enum: PRINT_PLACEMENTS, default: 'FRONT' },
+    printedSides: { type: [{ type: String, enum: DESIGN.SIDES }], default: undefined },
+    textLayers: { type: [textLayerSchema], default: undefined },
+    imageLayers: { type: [imageLayerSchema], default: undefined },
     customText: { type: String, trim: true, maxlength: 120, default: '' },
     backText: { type: String, trim: true, maxlength: 120, default: '' },
     textColor: { type: String, default: '#FFFFFF' },

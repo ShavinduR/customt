@@ -29,8 +29,12 @@ async function resolveUserFromToken(token) {
   } catch (err) {
     throw ApiError.unauthorized(err.name === 'TokenExpiredError' ? 'Session expired - please log in again' : 'Invalid authentication token');
   }
+  if (payload.purpose) throw ApiError.unauthorized('Invalid authentication token');
   const user = await User.findById(payload.sub);
   if (!user) throw ApiError.unauthorized('Account no longer exists');
+  if (user.tokenIssuedBeforePasswordChange(payload.iat)) {
+    throw ApiError.unauthorized('Your password was changed. Please log in again.', { code: 'PASSWORD_CHANGED' });
+  }
   if (!user.isActive) throw ApiError.forbidden('Your account has been suspended. Please contact support.', { code: 'ACCOUNT_SUSPENDED' });
   return user;
 }

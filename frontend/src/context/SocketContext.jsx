@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { API_URL } from '../api/client';
 import { useAuth } from './AuthContext';
@@ -28,6 +29,18 @@ const NOTIFY = {
   'vendor:registered': { tone: 'info', title: 'Vendor awaiting verification', text: (p) => `${p.companyName || p.name}${p.reverification ? ' changed their profile and needs re-verification' : ' registered'}.` },
   'dispute:note': { tone: 'info', title: 'New dispute message', text: (p) => `Order ${p.orderCode}` },
   'vendor:verification': { tone: 'success', title: 'Verification update', text: (p) => p.message },
+  'chat:message': {
+    tone: 'info',
+    title: 'New message',
+    text: (p) => `${p.message?.senderName}: ${String(p.message?.body || '').slice(0, 90)}`,
+    // Not for your own messages, and not while that order's chat is already on screen.
+    skip: (p, ctx) => p.message?.senderId === ctx.userId || ctx.pathname.includes(p.orderId),
+  },
+  'chat:flagged': {
+    tone: 'warning',
+    title: 'Contact details blocked in chat',
+    text: (p) => `${p.senderName} in ${p.orderCode}: ${(p.flags || []).join(', ')}`,
+  },
   'vendor:trust-updated': { tone: 'info', title: 'Trust score updated', text: (p) => `New trust score: ${p.trustScore} (was ${p.previousTrustScore}).` },
 };
 
@@ -41,6 +54,9 @@ export function SocketProvider({ children }) {
   const [connected, setConnected] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const counter = useRef(0);
+  const location = useLocation();
+  const pathnameRef = useRef(location.pathname);
+  pathnameRef.current = location.pathname;
 
   useEffect(() => {
     if (!token || !user) {
@@ -59,6 +75,7 @@ export function SocketProvider({ children }) {
 
     Object.entries(NOTIFY).forEach(([event, cfg]) => {
       instance.on(event, (payload) => {
+        if (cfg.skip && cfg.skip(payload || {}, { userId: user?._id, pathname: pathnameRef.current })) return;
         const text = cfg.text(payload || {});
         counter.current += 1;
         setNotifications((list) =>

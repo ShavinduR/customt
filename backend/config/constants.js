@@ -28,6 +28,19 @@ const SKILL_BADGES = Object.freeze([
 
 const MIN_ORDER_QUANTITY = 20;
 
+/** Layered artwork rules for the visual configurator (Module 1). */
+const DESIGN = Object.freeze({
+  SIDES: Object.freeze(['front', 'back', 'leftSleeve', 'rightSleeve']),
+  FONTS: Object.freeze(['Bebas Neue', 'Montserrat', 'Playfair Display', 'Pacifico']),
+  MAX_TEXT_LAYERS: 8,
+  MAX_IMAGE_LAYERS: 8,
+  TEXT_MAX: 60,
+  SIZE_MIN: 6,
+  SIZE_MAX: 96,
+  SCALE_MIN: 0.1,
+  SCALE_MAX: 1,
+});
+
 /** Module 1 - automatic expected-delivery estimation (working days). */
 const DELIVERY_ESTIMATION = Object.freeze({
   basePrintDays: {
@@ -150,6 +163,7 @@ module.exports = {
   PRINT_PLACEMENTS,
   SKILL_BADGES,
   MIN_ORDER_QUANTITY,
+  DESIGN,
   DELIVERY_ESTIMATION,
   AUCTION,
   RFQ_STATUS,

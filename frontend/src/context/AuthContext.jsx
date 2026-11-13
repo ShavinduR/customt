@@ -61,6 +61,12 @@ export function AuthProvider({ children }) {
   const login = useCallback((email, password) => authApi.login({ email, password }).then(applySession), [applySession]);
   const register = useCallback((payload) => authApi.register(payload).then(applySession), [applySession]);
 
+  /** Swap in a new token for the current user (e.g. after a password change), keeping them signed in. */
+  const replaceToken = useCallback((nextToken) => {
+    tokenStore.set(nextToken);
+    setToken(nextToken);
+  }, []);
+
   const refreshUser = useCallback(async () => {
     const res = await authApi.me();
     setUser(res.user);
@@ -68,8 +74,8 @@ export function AuthProvider({ children }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, token, initialising, isAuthenticated: Boolean(user), login, register, logout, refreshUser, setUser }),
-    [user, token, initialising, login, register, logout, refreshUser]
+    () => ({ user, token, initialising, isAuthenticated: Boolean(user), login, register, logout, refreshUser, setUser, replaceToken }),
+    [user, token, initialising, login, register, logout, refreshUser, replaceToken]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

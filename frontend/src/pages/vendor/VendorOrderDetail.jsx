@@ -10,9 +10,7 @@ import {
   Flag,
   History,
   KeyRound,
-  Mail,
   MessagesSquare,
-  Phone,
   QrCode,
   ScanSearch,
   ShieldCheck,
@@ -28,6 +26,8 @@ import OrderProgress from '../../components/orders/OrderProgress';
 import EscrowBreakdown from '../../components/orders/EscrowBreakdown';
 import DisputeThread from '../../components/orders/DisputeThread';
 import SpecSummary from '../../components/auction/SpecSummary';
+import ReceiptButton from '../../components/orders/ReceiptButton';
+import OrderChat from '../../components/chat/OrderChat';
 import OtpInput from '../../components/vendor/OtpInput';
 import QrScanner, { qrScanSupported } from '../../components/vendor/QrScanner';
 import { Alert, Button, Card, CardHeader, ErrorList, Field, Modal, PageHeader, PageLoader, StatusBadge, Textarea, TrustStars } from '../../components/ui';
@@ -308,12 +308,13 @@ export default function VendorOrderDetail() {
             <Card className="p-5">
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="h-8 w-8 shrink-0 text-emerald-500" />
-                <div>
+                <div className="min-w-0 flex-1">
                   <p className="font-semibold text-slate-900">Order completed: payment released</p>
                   <p className="text-sm text-slate-500">
                     {order.o2oMethod === 'ADMIN_RESOLUTION' ? `Settled through mediation on ${formatDate(order.completedAt)}.` : `Verified on ${formatDate(order.o2oVerifiedAt)}.`}
                   </p>
                 </div>
+                <ReceiptButton order={order} />
               </div>
               {order.buyerRating?.rating ? (
                 <div className="mt-4 rounded-xl bg-slate-50 p-4">
@@ -337,6 +338,8 @@ export default function VendorOrderDetail() {
           {order.orderStatus === 'REFUNDED' && <Alert tone="info" title="This order was refunded to the buyer after mediation." />}
           {order.orderStatus === 'CANCELLED' && <Alert tone="info" title="The buyer cancelled this order before funding escrow." />}
 
+          <OrderChat orderId={order._id} viewerRole="vendor" counterpartName={buyer.name} />
+
           {order.disputeNotes?.length > 0 && (
             <Card>
               <CardHeader icon={MessagesSquare} title="Resolution centre" subtitle="Polite, structured communication mediated by CustomT" />
@@ -347,7 +350,7 @@ export default function VendorOrderDetail() {
           )}
 
           <Card>
-            <CardHeader icon={ShieldCheck} title="Escrow payouts" />
+            <CardHeader icon={ShieldCheck} title="Escrow payouts" action={<ReceiptButton order={order} />} />
             <div className="p-5">
               <EscrowBreakdown order={order} viewer="vendor" />
             </div>
@@ -356,19 +359,13 @@ export default function VendorOrderDetail() {
 
         <div className="space-y-6">
           <Card>
-            <CardHeader icon={User} title="Buyer" subtitle="Contact for the O2O hand-over" />
+            <CardHeader icon={User} title="Buyer" subtitle="Arrange the O2O hand-over in the order chat" />
             <div className="space-y-3 p-5 text-sm">
               <p className="font-semibold text-slate-900">{buyer.name}</p>
-              {buyer.phone && (
-                <a href={`tel:${buyer.phone}`} className="flex items-center gap-2 text-slate-700 hover:text-brand-700">
-                  <Phone className="h-4 w-4 text-slate-400" /> {buyer.phone}
-                </a>
-              )}
-              {buyer.email && (
-                <a href={`mailto:${buyer.email}`} className="flex items-center gap-2 break-all text-slate-700 hover:text-brand-700">
-                  <Mail className="h-4 w-4 text-slate-400" /> {buyer.email}
-                </a>
-              )}
+              <p className="flex items-start gap-2 rounded-lg bg-slate-50 p-2.5 text-xs text-slate-600">
+                <MessagesSquare className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
+                Contact details stay private. Use the order chat to arrange the hand-over, so your escrow protection stays valid.
+              </p>
             </div>
           </Card>
 

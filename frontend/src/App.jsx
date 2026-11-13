@@ -9,6 +9,8 @@ import { PageLoader } from './components/ui';
 import Landing from './pages/Landing';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
+import ForgotPassword from './pages/auth/ForgotPassword';
+import ResetPassword from './pages/auth/ResetPassword';
 import Account from './pages/Account';
 import NotFound from './pages/NotFound';
 import BuyerDashboard from './pages/buyer/BuyerDashboard';
@@ -33,6 +35,7 @@ import AdminOrders from './pages/admin/AdminOrders';
 import AdminOrderDetail from './pages/admin/AdminOrderDetail';
 import Analytics from './pages/admin/Analytics';
 import UsersAdmin from './pages/admin/UsersAdmin';
+import Conversations from './pages/admin/Conversations';
 
 function HomeRoute() {
   const { user, initialising } = useAuth();
@@ -52,7 +55,9 @@ export default function App() {
                 <Route element={<GuestRoute />}>
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />
+                  <Route path="/forgot-password" element={<ForgotPassword />} />
                 </Route>
+                <Route path="/reset-password" element={<ResetPassword />} />
 
                 <Route element={<ProtectedRoute />}>
                   <Route element={<AppLayout />}>
@@ -90,6 +95,7 @@ export default function App() {
                       <Route path="/admin/orders/:id" element={<AdminOrderDetail />} />
                       <Route path="/admin/analytics" element={<Analytics />} />
                       <Route path="/admin/users" element={<UsersAdmin />} />
+                      <Route path="/admin/messages" element={<Conversations />} />
                     </Route>
 
                     <Route path="*" element={<NotFound />} />

@@ -19,6 +19,7 @@ const { toErrorResponse } = require('../middleware/errorHandler');
 const { User } = require('../models');
 const { ROLES } = require('../config/constants');
 const auctionService = require('../services/auctionService');
+const chatService = require('../services/chatService');
 const realtime = require('../services/realtime');
 
 function safeAck(ack) {
@@ -84,6 +85,26 @@ function registerSocketHandlers(io) {
       try {
         const user = await currentUser();
         reply({ ok: true, snapshot: await auctionService.getAuctionSnapshot(payload?.rfqId, user) });
+      } catch (err) {
+        reply(errorPayload(err));
+      }
+    });
+
+    socket.on('chat:send', async (payload, ack) => {
+      const reply = safeAck(ack);
+      try {
+        const user = await currentUser();
+        reply({ ok: true, result: await chatService.sendMessage(user, payload?.orderId, payload?.body) });
+      } catch (err) {
+        reply(errorPayload(err));
+      }
+    });
+
+    socket.on('chat:read', async (payload, ack) => {
+      const reply = safeAck(ack);
+      try {
+        const user = await currentUser();
+        reply({ ok: true, result: await chatService.markRead(user, payload?.orderId) });
       } catch (err) {
         reply(errorPayload(err));
       }

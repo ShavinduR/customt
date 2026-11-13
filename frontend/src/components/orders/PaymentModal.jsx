@@ -3,6 +3,7 @@ import { CheckCircle2, CreditCard, Lock, ShieldCheck } from 'lucide-react';
 import { orderApi } from '../../api/client';
 import { useCatalog } from '../../context/CatalogContext';
 import { Alert, Button, ErrorList, Field, Input, Modal } from '../ui';
+import ReceiptButton from './ReceiptButton';
 import { formatLKR } from '../../utils/format';
 
 const formatCardNumber = (v) =>
@@ -60,7 +61,17 @@ export default function PaymentModal({ order, open, onClose, onPaid }) {
 
   if (receipt) {
     return (
-      <Modal open={open} onClose={close} title="Payment successful" footer={<Button onClick={close}>Done</Button>}>
+      <Modal
+        open={open}
+        onClose={close}
+        title="Payment successful"
+        footer={
+          <>
+            <ReceiptButton order={order} size="md" />
+            <Button onClick={close}>Done</Button>
+          </>
+        }
+      >
         <div className="flex flex-col items-center text-center">
           <CheckCircle2 className="h-14 w-14 text-emerald-500" />
           <p className="mt-3 font-mono text-2xl font-bold text-slate-900">{formatLKR(receipt.amount)}</p>

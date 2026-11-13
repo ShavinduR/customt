@@ -32,13 +32,15 @@ Object.assign(process.env, {
   AUCTION_SCHEDULER_INTERVAL_MS: '3600000', // the test triggers expiry checks explicitly
   ALLOW_BID_PRICE_INCREASE: 'false',
   CLIENT_URL: 'http://localhost:5173',
+  SMTP_HOST: '', // e-mails are captured in memory instead of sent
 });
 
 const { io: ioClient } = require('socket.io-client');
 const { start } = require('../../server');
 const { disconnectDB } = require('../../config/db');
-const { User, RFQ, Bid, Order } = require('../../models');
+const { User, RFQ, Bid, Order, Message } = require('../../models');
 const { closeExpiredAuctions, stopAuctionScheduler } = require('../../services/auctionService');
+const { getLastTestMessage } = require('../../services/mailer');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────────────────
 let BASE;
@@ -150,7 +152,7 @@ test.before(async () => {
   runtime = await start();
   if (!runtime.server.listening) await new Promise((r) => runtime.server.once('listening', r));
   BASE = `http://127.0.0.1:${runtime.server.address().port}`;
-  await Promise.all([User, RFQ, Bid, Order].map((m) => m.deleteMany({})));
+  await Promise.all([User, RFQ, Bid, Order, Message].map((m) => m.deleteMany({})));
 });
 
 test.after(async () => {
@@ -507,4 +509,115 @@ test('admin analytics reflect the run', async () => {
   assert.ok(a.auctionEfficiency.highVarianceRfqCount >= 1);
   assert.ok(a.auctionEfficiency.avgPriceDiscoverySavingsPct > 0);
   assert.equal(a.quality.ratingsCount, 1);
+});
+
+// ── 18. Buyer-vendor chat with contact filtering ─────────────────────────────────────────
+test('chat: contact details are masked before delivery; admins see originals; outsiders are refused', async () => {
+  const orderId = S.order._id;
+  const sAdmin = await connect(S.admin);
+
+  const toBuyer = waitFor(S.sBuyer, 'chat:message', (p) => p.orderId === orderId);
+  const toAdmin = waitFor(sAdmin, 'chat:monitor', (p) => p.orderId === orderId);
+  const flaggedAlert = waitFor(sAdmin, 'chat:flagged', (p) => p.orderId === orderId);
+  const raw = 'Thanks! WhatsApp me on 077 123 4567 or email kasun.silva@gmail.com for faster replies';
+  const sent = await emitAck(S.sV2, 'chat:send', { orderId, body: raw });
+  assert.equal(sent.ok, true, JSON.stringify(sent));
+  assert.deepEqual([...sent.result.blocked].sort(), ['app', 'email', 'phone']);
+  assert.ok(!/4567|kasun|gmail|whatsapp/i.test(sent.result.message.body), sent.result.message.body);
+  assert.ok(sent.result.message.body.includes('[CONTACT BLOCKED]'));
+
+  const delivered = await toBuyer;
+  assert.equal(delivered.message.body, sent.result.message.body, 'the buyer receives the filtered text');
+  assert.equal(delivered.message.originalBody, undefined, 'the buyer never receives the original');
+  const monitored = await toAdmin;
+  assert.equal(monitored.message.originalBody, raw, 'admins receive the original for monitoring');
+  assert.equal((await flaggedAlert).orderCode, S.order.orderCode);
+
+  await ok('POST', `/orders/${orderId}/messages`, S.buyer, { body: 'Great, the shirts look perfect. Thank you!' });
+
+  const buyerView = await ok('GET', `/orders/${orderId}/messages`, S.buyer);
+  assert.equal(buyerView.messages.length, 2);
+  assert.equal(buyerView.unread, 1, "the vendor's message is unread for the buyer");
+  assert.ok(buyerView.messages.every((m) => m.originalBody === undefined && m.flags === undefined));
+  assert.equal(buyerView.canSend, true);
+
+  const seen = waitFor(S.sV2, 'chat:read', (p) => p.orderId === orderId);
+  await ok('POST', `/orders/${orderId}/messages/read`, S.buyer);
+  await seen;
+  assert.equal((await ok('GET', `/orders/${orderId}/messages`, S.buyer)).unread, 0);
+
+  const outsider = await api('GET', `/orders/${orderId}/messages`, S.v1.token);
+  assert.equal(outsider.status, 403, 'a vendor who lost the auction cannot read the chat');
+  const outsiderSend = await api('POST', `/orders/${orderId}/messages`, S.v1.token, { body: 'hello' });
+  assert.equal(outsiderSend.status, 403);
+
+  const adminView = await ok('GET', `/orders/${orderId}/messages`, S.admin);
+  assert.equal(adminView.canSend, false);
+  assert.equal(adminView.messages[0].originalBody, raw);
+  assert.deepEqual([...adminView.messages[0].flags].sort(), ['app', 'email', 'phone']);
+  const adminPost = await emitAck(sAdmin, 'chat:send', { orderId, body: 'hi' });
+  assert.equal(adminPost.ok, false, 'admins monitor but do not post');
+
+  const conversations = await ok('GET', '/admin/conversations?flagged=true', S.admin);
+  const row = conversations.items.find((c) => c.orderId === orderId);
+  assert.ok(row, 'the flagged conversation is listed for admins');
+  assert.equal(row.flaggedMessages, 1);
+  assert.equal(row.messages, 2);
+
+  const asBuyer = (await ok('GET', `/orders/${orderId}`, S.buyer)).order;
+  assert.equal(asBuyer.vendorId.phone, undefined, "buyers don't receive the vendor's phone");
+  assert.equal(asBuyer.vendorId.email, undefined);
+  const asVendor = (await ok('GET', `/orders/${orderId}`, S.v2.token)).order;
+  assert.equal(asVendor.buyerId.phone, undefined, "vendors don't receive the buyer's phone");
+  assert.equal(asVendor.buyerId.email, undefined);
+  const asAdmin = (await ok('GET', `/orders/${orderId}`, S.admin)).order;
+  assert.ok(asAdmin.buyerId.email && asAdmin.vendorId.email, 'admins still see contact details');
+
+  const stored = await Message.findOne({ orderId, flagged: true }).select('+originalBody');
+  assert.equal(stored.originalBody, raw, 'the original is kept in MongoDB for audit');
+});
+
+// ── 19. Forgot / reset password ──────────────────────────────────────────────────────────
+test('password reset: generic answer, e-mailed single-use link, old sessions signed out', async () => {
+  const generic = await ok('POST', '/auth/forgot-password', null, { email: 'nobody@e2e.test' });
+  const real = await ok('POST', '/auth/forgot-password', null, { email: 'buyer@e2e.test' });
+  assert.equal(real.message, generic.message, 'unknown and known e-mails must get the same answer');
+
+  let mail = null;
+  for (let i = 0; i < 50 && !(mail && mail.to === 'buyer@e2e.test'); i += 1) {
+    await sleep(20);
+    mail = getLastTestMessage();
+  }
+  assert.ok(mail && mail.to === 'buyer@e2e.test', 'a reset e-mail was prepared for the buyer');
+  const match = mail.text.match(/(http:\/\/localhost:5173\/reset-password\?token=)(\S+)/);
+  assert.ok(match, 'the e-mail links to the web app reset page');
+  assert.ok(mail.html.includes('Reset my password'));
+  const token = decodeURIComponent(match[2]);
+
+  const weak = await api('POST', '/auth/reset-password', null, { token, password: 'short' });
+  assert.equal(weak.status, 400);
+  const forged = await api('POST', '/auth/reset-password', null, { token: `${token}x`, password: 'NewBuyer123' });
+  assert.equal(forged.status, 400);
+  assert.equal(forged.body.code, 'RESET_TOKEN_INVALID');
+  const asLogin = await api('GET', '/auth/me', token);
+  assert.equal(asLogin.status, 401, 'a reset token is not a login token');
+
+  assert.equal((await api('GET', '/auth/me', S.buyer)).status, 200, 'the old session works before the reset');
+  await ok('POST', '/auth/reset-password', null, { token, password: 'NewBuyer123' });
+
+  const oldSession = await api('GET', '/auth/me', S.buyer);
+  assert.equal(oldSession.status, 401);
+  assert.equal(oldSession.body.code, 'PASSWORD_CHANGED');
+  const reused = await api('POST', '/auth/reset-password', null, { token, password: 'Another123' });
+  assert.equal(reused.status, 400);
+  assert.equal(reused.body.code, 'RESET_TOKEN_INVALID', 'a reset link works only once');
+
+  assert.equal((await api('POST', '/auth/login', null, { email: 'buyer@e2e.test', password: 'Buyer1234' })).status, 401);
+  const login = await ok('POST', '/auth/login', null, { email: 'buyer@e2e.test', password: 'NewBuyer123' });
+
+  await sleep(1100); // the next token must be issued in a later second than this login's
+  const changed = await ok('PATCH', '/auth/me/password', login.token, { currentPassword: 'NewBuyer123', newPassword: 'Changed1234' });
+  assert.ok(changed.token, 'changing the password returns a fresh token');
+  assert.equal((await api('GET', '/auth/me', login.token)).status, 401, 'other sessions are signed out');
+  assert.equal((await api('GET', '/auth/me', changed.token)).status, 200, 'the current session stays logged in');
 });

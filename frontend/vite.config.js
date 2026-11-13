@@ -10,6 +10,7 @@ export default defineConfig({
   },
   build: {
     sourcemap: false,
-    chunkSizeWarningLimit: 900,
+    // The lazily loaded 3D viewer (three.js) is ~940 kB raw / ~255 kB gzip and only downloads on demand.
+    chunkSizeWarningLimit: 1000,
   },
 });
