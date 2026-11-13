@@ -6,6 +6,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const { signToken, protect } = require('../middleware/auth');
 const { ROLES, PRINT_TYPES } = require('../config/constants');
 const realtime = require('../services/realtime');
+const { requestPasswordReset, userFromResetToken } = require('../services/passwordReset');
 
 const router = express.Router();
 
@@ -17,7 +18,17 @@ const authLimiter = rateLimit({
   message: { success: false, message: 'Too many attempts. Please try again in a few minutes.' },
 });
 
+// Reset e-mails are expensive and could be used to flood an inbox, so they get a tighter budget.
+const resetRequestLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many reset requests. Please wait 15 minutes and try again.' },
+});
+
 const PASSWORD_RULE = /^(?=.*[A-Za-z])(?=.*\d).{8,64}$/;
+const EMAIL_RULE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function authResponse(user) {
   return {
@@ -201,7 +212,42 @@ router.patch(
     }
     await user.setPassword(newPassword);
     await user.save({ validateModifiedOnly: true });
-    res.json({ success: true, message: 'Password changed successfully' });
+    // Older sessions are now rejected, so hand this one a fresh token to stay logged in.
+    res.json({ success: true, message: 'Password changed successfully. Other devices have been signed out.', token: signToken(user) });
+  })
+);
+
+/**
+ * POST /api/auth/forgot-password { email }
+ * Always answers the same way, whether or not the account exists, so it can't be used to probe e-mails.
+ */
+router.post(
+  '/forgot-password',
+  resetRequestLimiter,
+  asyncHandler(async (req, res) => {
+    const email = String(req.body.email || '').toLowerCase().trim();
+    if (!EMAIL_RULE.test(email)) throw ApiError.badRequest('Enter a valid email address');
+    await requestPasswordReset(email);
+    res.json({
+      success: true,
+      message: 'If an account exists for that email, we have sent a link to reset the password. Check your inbox and spam folder.',
+    });
+  })
+);
+
+/** POST /api/auth/reset-password { token, password } */
+router.post(
+  '/reset-password',
+  authLimiter,
+  asyncHandler(async (req, res) => {
+    const password = String(req.body.password || '');
+    if (!PASSWORD_RULE.test(password)) {
+      throw ApiError.badRequest('Password must be 8-64 characters and contain at least one letter and one number');
+    }
+    const user = await userFromResetToken(req.body.token);
+    await user.setPassword(password); // also invalidates this link and signs out every existing session
+    await user.save({ validateModifiedOnly: true });
+    res.json({ success: true, message: 'Your password has been reset. You can now log in with the new password.' });
   })
 );
 

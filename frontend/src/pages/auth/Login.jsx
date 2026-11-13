@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Lock, LogIn, Mail } from 'lucide-react';
 import { roleHome, useAuth } from '../../context/AuthContext';
 import AuthShell from './AuthShell';
-import { Button, ErrorList, Field, Input } from '../../components/ui';
+import { Alert, Button, ErrorList, Field, Input } from '../../components/ui';
 
 const DEMO_ACCOUNTS = [
   { label: 'Buyer', email: 'buyer@customt.lk', password: 'Demo@12345' },
@@ -36,6 +36,11 @@ export default function Login() {
 
   return (
     <AuthShell title="Sign in to CustomT" subtitle="Welcome back. Your auctions and orders are waiting.">
+      {location.state?.notice && (
+        <Alert tone="success" className="mb-4">
+          {location.state.notice}
+        </Alert>
+      )}
       <form onSubmit={submit} className="space-y-4" noValidate>
         <Field label="Email" htmlFor="email">
           <Input id="email" icon={Mail} type="email" autoComplete="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} required />
@@ -51,6 +56,11 @@ export default function Login() {
             required
           />
         </Field>
+        <div className="-mt-2 text-right">
+          <Link to="/forgot-password" className="text-sm font-medium text-brand-700 hover:underline">
+            Forgot password?
+          </Link>
+        </div>
         <ErrorList error={error} />
         <Button type="submit" size="lg" className="w-full" icon={LogIn} loading={busy} disabled={!form.email || !form.password}>
           Sign in

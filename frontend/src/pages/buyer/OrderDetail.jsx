@@ -29,6 +29,7 @@ import O2OPanel from '../../components/orders/O2OPanel';
 import DisputeModal from '../../components/orders/DisputeModal';
 import DisputeThread from '../../components/orders/DisputeThread';
 import RatingModal from '../../components/orders/RatingModal';
+import ReceiptButton from '../../components/orders/ReceiptButton';
 import SpecSummary from '../../components/auction/SpecSummary';
 import { Alert, Badge, Button, Card, CardHeader, ErrorList, Modal, PageHeader, PageLoader, StatusBadge, TrustStars } from '../../components/ui';
 import { formatDate, formatLKR, titleCase } from '../../utils/format';
@@ -196,11 +197,14 @@ export default function OrderDetail() {
                     </p>
                   </div>
                 </div>
-                {order.canRate && (
-                  <Button icon={Star} onClick={() => setModal('rate')}>
-                    Rate {vendorName}
-                  </Button>
-                )}
+                <div className="flex flex-wrap gap-2">
+                  <ReceiptButton order={order} size="md" />
+                  {order.canRate && (
+                    <Button icon={Star} onClick={() => setModal('rate')}>
+                      Rate {vendorName}
+                    </Button>
+                  )}
+                </div>
               </div>
               {order.buyerRating?.rating && (
                 <div className="mt-4 rounded-xl bg-slate-50 p-4">
@@ -231,7 +235,7 @@ export default function OrderDetail() {
           )}
 
           <Card>
-            <CardHeader icon={ShieldCheck} title="Escrow" subtitle="Split-payment protection" />
+            <CardHeader icon={ShieldCheck} title="Escrow" subtitle="Split-payment protection" action={<ReceiptButton order={order} />} />
             <div className="p-5">
               <EscrowBreakdown order={order} />
             </div>

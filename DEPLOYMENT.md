@@ -64,6 +64,18 @@ Set `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` first, and change the password af
 
 **Verify:** `https://<api>/api/health` returns `{"success":true,"db":"connected"}`.
 
+### Password reset e-mail (optional but recommended)
+
+"Forgot password" sends a reset link with nodemailer over SMTP. Without `SMTP_HOST`, nothing is sent (in production the API only logs a warning; locally it prints the link to the console).
+
+**Render's free plan blocks outgoing SMTP on ports 25, 465 and 587**, so use a provider that also accepts **port 2525**. Example with Brevo (free tier: 300 e-mails/day):
+
+1. Create a Brevo account, verify a sender address, then open *SMTP & API → SMTP* to get your SMTP login and an SMTP key.
+2. In Render → *Environment*, set `SMTP_HOST=smtp-relay.brevo.com`, `SMTP_PORT=2525`, `SMTP_USER=<SMTP login>`, `SMTP_PASS=<SMTP key>`, `MAIL_FROM=CustomT <your verified sender>`.
+3. Make sure `CLIENT_URL` is your Vercel URL: reset links point there (or set `APP_URL` explicitly).
+
+SendGrid and Mailgun also offer port 2525. On a paid Render plan, any SMTP provider (including Gmail with an app password) works on port 587.
+
 ## 4. Frontend on Vercel (or Netlify)
 
 **Vercel:** *Add New → Project* → import the repo. Set **Root Directory** to `frontend` (the framework is detected as Vite). Add this environment variable:

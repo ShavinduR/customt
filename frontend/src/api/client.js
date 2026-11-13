@@ -70,6 +70,8 @@ export const authApi = {
   me: () => unwrap(http.get('/auth/me')),
   updateMe: (payload) => unwrap(http.patch('/auth/me', payload)),
   changePassword: (payload) => unwrap(http.patch('/auth/me/password', payload)),
+  forgotPassword: (email) => unwrap(http.post('/auth/forgot-password', { email }, { skipAuthRedirect: true })),
+  resetPassword: (token, password) => unwrap(http.post('/auth/reset-password', { token, password }, { skipAuthRedirect: true })),
 };
 
 export const metaApi = {

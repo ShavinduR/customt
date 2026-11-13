@@ -44,6 +44,19 @@ const config = {
   mockGatewayLatencyMs: toInt(process.env.MOCK_GATEWAY_LATENCY_MS, 800),
   maxUploadMb: toInt(process.env.MAX_UPLOAD_MB, 2),
   uploadDir: path.resolve(__dirname, '..', 'uploads'),
+
+  // Password reset e-mails. Without SMTP_HOST, mail is not sent (development prints the link instead).
+  smtp: {
+    host: (process.env.SMTP_HOST || '').trim(),
+    port: toInt(process.env.SMTP_PORT, 587),
+    secure: String(process.env.SMTP_SECURE || '').toLowerCase() === 'true' || toInt(process.env.SMTP_PORT, 587) === 465,
+    user: process.env.SMTP_USER || '',
+    pass: process.env.SMTP_PASS || '',
+  },
+  mailFrom: process.env.MAIL_FROM || 'CustomT <no-reply@customt.lk>',
+  // Base URL of the web app, used in e-mailed links. Defaults to the first CLIENT_URL.
+  appUrl: (process.env.APP_URL || (process.env.CLIENT_URL || 'http://localhost:5173').split(',')[0]).trim().replace(/\/+$/, ''),
+  passwordResetMinutes: toInt(process.env.PASSWORD_RESET_MINUTES, 15),
 };
 
 module.exports = { config, assertRequiredEnv };

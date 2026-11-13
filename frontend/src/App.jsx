@@ -9,6 +9,8 @@ import { PageLoader } from './components/ui';
 import Landing from './pages/Landing';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
+import ForgotPassword from './pages/auth/ForgotPassword';
+import ResetPassword from './pages/auth/ResetPassword';
 import Account from './pages/Account';
 import NotFound from './pages/NotFound';
 import BuyerDashboard from './pages/buyer/BuyerDashboard';
@@ -52,7 +54,9 @@ export default function App() {
                 <Route element={<GuestRoute />}>
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />
+                  <Route path="/forgot-password" element={<ForgotPassword />} />
                 </Route>
+                <Route path="/reset-password" element={<ResetPassword />} />
 
                 <Route element={<ProtectedRoute />}>
                   <Route element={<AppLayout />}>

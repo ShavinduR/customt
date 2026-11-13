@@ -8,6 +8,7 @@ import OrderProgress from '../../components/orders/OrderProgress';
 import EscrowBreakdown from '../../components/orders/EscrowBreakdown';
 import DisputeThread from '../../components/orders/DisputeThread';
 import SpecSummary from '../../components/auction/SpecSummary';
+import ReceiptButton from '../../components/orders/ReceiptButton';
 import { Alert, Badge, Button, Card, CardHeader, ErrorList, Field, Modal, PageHeader, PageLoader, StatusBadge, Textarea, TrustStars, cx } from '../../components/ui';
 import { formatDate, formatLKR, titleCase } from '../../utils/format';
 import { statusMeta } from '../../utils/status';
@@ -224,7 +225,7 @@ export default function AdminOrderDetail() {
           )}
 
           <Card>
-            <CardHeader icon={ShieldCheck} title="Escrow ledger" />
+            <CardHeader icon={ShieldCheck} title="Escrow ledger" action={<ReceiptButton order={order} />} />
             <div className="p-5">
               <EscrowBreakdown order={order} viewer="admin" />
             </div>

@@ -32,6 +32,7 @@ Object.assign(process.env, {
   AUCTION_SCHEDULER_INTERVAL_MS: '3600000', // the test triggers expiry checks explicitly
   ALLOW_BID_PRICE_INCREASE: 'false',
   CLIENT_URL: 'http://localhost:5173',
+  SMTP_HOST: '', // e-mails are captured in memory instead of sent
 });
 
 const { io: ioClient } = require('socket.io-client');
@@ -39,6 +40,7 @@ const { start } = require('../../server');
 const { disconnectDB } = require('../../config/db');
 const { User, RFQ, Bid, Order } = require('../../models');
 const { closeExpiredAuctions, stopAuctionScheduler } = require('../../services/auctionService');
+const { getLastTestMessage } = require('../../services/mailer');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────────────────
 let BASE;
@@ -507,4 +509,49 @@ test('admin analytics reflect the run', async () => {
   assert.ok(a.auctionEfficiency.highVarianceRfqCount >= 1);
   assert.ok(a.auctionEfficiency.avgPriceDiscoverySavingsPct > 0);
   assert.equal(a.quality.ratingsCount, 1);
+});
+
+// ── 18. Forgot / reset password ──────────────────────────────────────────────────────────
+test('password reset: generic answer, e-mailed single-use link, old sessions signed out', async () => {
+  const generic = await ok('POST', '/auth/forgot-password', null, { email: 'nobody@e2e.test' });
+  const real = await ok('POST', '/auth/forgot-password', null, { email: 'buyer@e2e.test' });
+  assert.equal(real.message, generic.message, 'unknown and known e-mails must get the same answer');
+
+  let mail = null;
+  for (let i = 0; i < 50 && !(mail && mail.to === 'buyer@e2e.test'); i += 1) {
+    await sleep(20);
+    mail = getLastTestMessage();
+  }
+  assert.ok(mail && mail.to === 'buyer@e2e.test', 'a reset e-mail was prepared for the buyer');
+  const match = mail.text.match(/(http:\/\/localhost:5173\/reset-password\?token=)(\S+)/);
+  assert.ok(match, 'the e-mail links to the web app reset page');
+  assert.ok(mail.html.includes('Reset my password'));
+  const token = decodeURIComponent(match[2]);
+
+  const weak = await api('POST', '/auth/reset-password', null, { token, password: 'short' });
+  assert.equal(weak.status, 400);
+  const forged = await api('POST', '/auth/reset-password', null, { token: `${token}x`, password: 'NewBuyer123' });
+  assert.equal(forged.status, 400);
+  assert.equal(forged.body.code, 'RESET_TOKEN_INVALID');
+  const asLogin = await api('GET', '/auth/me', token);
+  assert.equal(asLogin.status, 401, 'a reset token is not a login token');
+
+  assert.equal((await api('GET', '/auth/me', S.buyer)).status, 200, 'the old session works before the reset');
+  await ok('POST', '/auth/reset-password', null, { token, password: 'NewBuyer123' });
+
+  const oldSession = await api('GET', '/auth/me', S.buyer);
+  assert.equal(oldSession.status, 401);
+  assert.equal(oldSession.body.code, 'PASSWORD_CHANGED');
+  const reused = await api('POST', '/auth/reset-password', null, { token, password: 'Another123' });
+  assert.equal(reused.status, 400);
+  assert.equal(reused.body.code, 'RESET_TOKEN_INVALID', 'a reset link works only once');
+
+  assert.equal((await api('POST', '/auth/login', null, { email: 'buyer@e2e.test', password: 'Buyer1234' })).status, 401);
+  const login = await ok('POST', '/auth/login', null, { email: 'buyer@e2e.test', password: 'NewBuyer123' });
+
+  await sleep(1100); // the next token must be issued in a later second than this login's
+  const changed = await ok('PATCH', '/auth/me/password', login.token, { currentPassword: 'NewBuyer123', newPassword: 'Changed1234' });
+  assert.ok(changed.token, 'changing the password returns a fresh token');
+  assert.equal((await api('GET', '/auth/me', login.token)).status, 401, 'other sessions are signed out');
+  assert.equal((await api('GET', '/auth/me', changed.token)).status, 200, 'the current session stays logged in');
 });

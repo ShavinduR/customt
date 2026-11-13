@@ -12,6 +12,7 @@ const ROLE_LABEL = { buyer: 'Buyer', vendor: 'Vendor (SME printer)', admin: 'Pla
 
 function PasswordCard() {
   const toast = useToast();
+  const { replaceToken } = useAuth();
   const [form, setForm] = useState({ currentPassword: '', newPassword: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -22,6 +23,7 @@ function PasswordCard() {
     setError(null);
     try {
       const res = await authApi.changePassword(form);
+      if (res.token) replaceToken(res.token);
       toast.success(res.message);
       setForm({ currentPassword: '', newPassword: '' });
     } catch (err) {

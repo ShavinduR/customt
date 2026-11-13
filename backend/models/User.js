@@ -72,6 +72,8 @@ const userSchema = new mongoose.Schema(
 
     isActive: { type: Boolean, default: true },
     lastLoginAt: { type: Date },
+    // Login tokens issued before this moment are rejected (set on every password change or reset).
+    passwordChangedAt: { type: Date },
   },
   {
     timestamps: true,
@@ -102,6 +104,13 @@ userSchema.virtual('isPrequalified').get(function isPrequalified() {
 
 userSchema.methods.setPassword = async function setPassword(plain) {
   this.passwordHash = await bcrypt.hash(plain, 12);
+  this.passwordChangedAt = new Date();
+};
+
+/** True when a JWT issued at `iatSeconds` predates the last password change (so it must be rejected). */
+userSchema.methods.tokenIssuedBeforePasswordChange = function tokenIssuedBeforePasswordChange(iatSeconds) {
+  if (!this.passwordChangedAt || typeof iatSeconds !== 'number') return false;
+  return iatSeconds < Math.floor(this.passwordChangedAt.getTime() / 1000);
 };
 
 userSchema.methods.comparePassword = function comparePassword(plain) {

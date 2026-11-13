@@ -36,4 +36,17 @@ services:
         value: 800
       - key: MAX_UPLOAD_MB
         value: 2
+      # Password reset e-mail. The free plan blocks ports 25/465/587: use a provider on port 2525.
+      - key: SMTP_HOST
+        sync: false          # e.g. smtp-relay.brevo.com
+      - key: SMTP_PORT
+        value: 2525
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: MAIL_FROM
+        sync: false          # e.g. CustomT <no-reply@yourdomain.com> (a sender verified with the provider)
+      - key: PASSWORD_RESET_MINUTES
+        value: 15
 
