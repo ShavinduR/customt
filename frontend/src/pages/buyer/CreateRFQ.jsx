@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowLeftRight,
+  Box,
   CalendarClock,
   Droplets,
   FileText,
   Layers,
   Lock,
   Move,
+  PenTool,
   Palette,
   Rocket,
   Ruler,
@@ -15,7 +16,6 @@ import {
   ShieldCheck,
   Shirt,
   Sparkles,
-  Type,
   Users,
 } from 'lucide-react';
 import { rfqApi } from '../../api/client';
@@ -25,15 +25,18 @@ import useDebouncedValue from '../../hooks/useDebouncedValue';
 import TShirtPreview from '../../components/configurator/TShirtPreview';
 import SizeMatrix from '../../components/configurator/SizeMatrix';
 import OptionCard from '../../components/configurator/OptionCard';
-import LogoUploader from '../../components/configurator/LogoUploader';
+import ArtworkEditor from '../../components/configurator/ArtworkEditor';
 import { Alert, Button, Card, ErrorList, Field, Input, Modal, PageHeader, PageLoader, Spinner, Textarea, cx } from '../../components/ui';
 import { COLOR_SWATCHES, FABRIC_INFO, GARMENT_INFO, PRINT_TYPE_INFO } from '../../utils/status';
+import { SIDES, SIDE_LABEL } from '../../utils/garmentGeometry';
+import { estimateDeliveryDays, layersOf, printedSides } from '../../utils/design';
 
-const DRAFT_KEY = 'customt_rfq_draft_v1';
+const Shirt3DViewer = lazy(() => import('../../components/configurator/Shirt3DViewer'));
+
+const DRAFT_KEY = 'customt_rfq_draft_v2';
+const LEGACY_DRAFT_KEY = 'customt_rfq_draft_v1';
 const PRINT_ICONS = { 'Screen Printing': Layers, DTF: Sparkles, Embroidery: Scissors, Sublimation: Droplets };
 const GSM_HINT = { 160: 'Light', 180: 'Standard', 200: 'Heavy', 220: 'Premium' };
-const PLACEMENT_LABEL = { FRONT: 'Front only', BACK: 'Back only', FRONT_AND_BACK: 'Front & back' };
-const TEXT_SWATCHES = ['#FFFFFF', '#111827', '#DC2626', '#F59E0B', '#2563EB', '#15803D', '#D4AF37'];
 
 const DEFAULT_SPECS = {
   garmentType: 'Crew Neck',
@@ -41,19 +44,34 @@ const DEFAULT_SPECS = {
   gsm: 180,
   color: '#1E3A8A',
   printType: 'Screen Printing',
-  printPlacement: 'FRONT',
-  customText: 'CUSTOMT EVENT 2026',
-  backText: '',
-  textColor: '#FFFFFF',
-  logoUrl: '',
-  designPosition: { x: 50, y: 30, scale: 1 },
+  textLayers: [
+    { id: 'tfront', side: 'front', text: 'CUSTOMT EVENT 2026', font: 'Bebas Neue', size: 28, color: '#FFFFFF', x: 50, y: 30 },
+    { id: 'tback', side: 'back', text: 'CREW', font: 'Montserrat', size: 40, color: '#FFFFFF', x: 50, y: 25 },
+  ],
+  imageLayers: [],
   sizeBreakdown: { S: 10, M: 20, L: 20, XL: 10, XXL: 5 },
 };
+
+const DESIGN_FIELDS = ['garmentType', 'fabric', 'gsm', 'color', 'printType', 'sizeBreakdown'];
+
+/** Keeps only the fields the layered configurator edits; older single-text designs become layers. */
+function toLayeredSpecs(specs) {
+  const base = Object.fromEntries(DESIGN_FIELDS.filter((k) => specs[k] !== undefined).map((k) => [k, specs[k]]));
+  return { ...DEFAULT_SPECS, ...base, ...layersOf(specs) };
+}
 
 function loadDraft() {
   try {
     const raw = localStorage.getItem(DRAFT_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (raw) {
+      const draft = JSON.parse(raw);
+      return draft?.specs ? { ...draft, specs: toLayeredSpecs(draft.specs) } : null;
+    }
+    const legacy = localStorage.getItem(LEGACY_DRAFT_KEY);
+    if (!legacy) return null;
+    const draft = JSON.parse(legacy);
+    localStorage.removeItem(LEGACY_DRAFT_KEY);
+    return draft?.specs ? { ...draft, specs: toLayeredSpecs(draft.specs) } : null;
   } catch {
     return null;
   }
@@ -73,16 +91,6 @@ function clearDraft() {
   } catch {
     /* ignore */
   }
-}
-
-/** Mirrors the backend estimator so the buyer sees delivery days instantly. */
-function estimateDeliveryDays(specs, total, estimation) {
-  if (!estimation) return null;
-  const base = estimation.basePrintDays[specs.printType] ?? 7;
-  const garment = estimation.garmentExtraDays[specs.garmentType] ?? 0;
-  const volume = Math.max(0, Math.ceil(total / estimation.piecesPerExtraDay) - 1);
-  const sides = specs.printPlacement === 'FRONT_AND_BACK' ? estimation.bothSidesExtraDays : 0;
-  return base + garment + volume + sides;
 }
 
 function Section({ step, title, icon: Icon, children, subtitle }) {
@@ -114,6 +122,8 @@ export default function CreateRFQ() {
   const [description, setDescription] = useState(draft?.description || '');
   const [deliveryOverride, setDeliveryOverride] = useState(draft?.deliveryOverride || '');
   const [view, setView] = useState('front');
+  const [mode3d, setMode3d] = useState(false);
+  const [selectedId, setSelectedId] = useState(null);
   const [preview, setPreview] = useState(null);
   const [previewError, setPreviewError] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -127,24 +137,39 @@ export default function CreateRFQ() {
   const moq = catalog?.minOrderQuantity || 20;
   const total = sizes.reduce((sum, s) => sum + (Number(specs.sizeBreakdown[s]) || 0), 0);
   const minDays = estimateDeliveryDays(specs, total, catalog?.deliveryEstimation);
-  const hasArtwork = Boolean(specs.customText.trim() || specs.backText.trim() || specs.logoUrl);
+  const sidesPrinted = printedSides(specs);
+  const hasArtwork = sidesPrinted.length > 0;
+  const emptyText = specs.textLayers.some((l) => !l.text.trim());
+  const moveLayer = useCallback(
+    (id, pos) =>
+      setSpecs((s) => ({
+        ...s,
+        textLayers: s.textLayers.map((l) => (l.id === id ? { ...l, ...pos } : l)),
+        imageLayers: s.imageLayers.map((l) => (l.id === id ? { ...l, ...pos } : l)),
+      })),
+    []
+  );
+  /** Selecting a layer (on the garment or in the list) also switches to the side it is printed on. */
+  const selectLayer = (id) => {
+    setSelectedId(id);
+    const layer = [...specs.textLayers, ...specs.imageLayers].find((l) => l.id === id);
+    if (layer && layer.side !== view) setView(layer.side);
+  };
+  const showSide = (side) => {
+    setView(side);
+    setMode3d(false);
+  };
 
   useEffect(() => {
     saveDraft({ specs, title, description, deliveryOverride });
   }, [specs, title, description, deliveryOverride]);
-
-  // Show the side that actually carries artwork.
-  useEffect(() => {
-    if (specs.printPlacement === 'BACK') setView('back');
-    if (specs.printPlacement === 'FRONT') setView('front');
-  }, [specs.printPlacement]);
 
   // Live server-side diagnostic: PERA event-level lock (eligible vendor count).
   const debouncedSpecs = useDebouncedValue(specs, 600);
   useEffect(() => {
     let cancelled = false;
     const qty = sizes.reduce((sum, s) => sum + (Number(debouncedSpecs.sizeBreakdown[s]) || 0), 0);
-    const artwork = debouncedSpecs.customText.trim() || debouncedSpecs.backText.trim() || debouncedSpecs.logoUrl;
+    const artwork = printedSides(debouncedSpecs).length > 0 && debouncedSpecs.textLayers.every((l) => l.text.trim());
     if (!catalog || qty < moq || !artwork) {
       setPreview(null);
       setPreviewError(null);
@@ -171,7 +196,8 @@ export default function CreateRFQ() {
   const validation = [];
   if (title.trim().length < 3) validation.push('Give your RFQ a title (at least 3 characters).');
   if (total < moq) validation.push(`Order at least ${moq} pieces (currently ${total}).`);
-  if (!hasArtwork) validation.push('Add custom text or upload a logo.');
+  if (!hasArtwork) validation.push('Add text or an image to at least one side.');
+  if (emptyText) validation.push('One of your text layers is empty. Type something or delete it.');
   if (deliveryOverride !== '' && (!Number.isInteger(deliveryDays) || deliveryDays < minDays)) validation.push(`Delivery must be at least ${minDays} days for this specification.`);
   if (preview && !preview.canLaunch) validation.push('No prequalified vendor can fulfil this order yet (PERA event lock).');
 
@@ -225,6 +251,8 @@ export default function CreateRFQ() {
             variant="ghost"
             onClick={() => {
               setSpecs(DEFAULT_SPECS);
+              setSelectedId(null);
+              setView('front');
               setTitle('');
               setDescription('');
               setDeliveryOverride('');
@@ -240,41 +268,48 @@ export default function CreateRFQ() {
         {/* ── Live preview ── */}
         <div className="lg:sticky lg:top-24 lg:self-start">
           <Card className="overflow-hidden">
-            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-              <div className="flex rounded-lg bg-slate-100 p-1">
-                {['front', 'back'].map((v) => (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
+              <div className="flex flex-wrap rounded-lg bg-slate-100 p-1" role="tablist" aria-label="Garment view">
+                {SIDES.map((v) => (
                   <button
                     key={v}
                     type="button"
-                    onClick={() => setView(v)}
-                    className={cx('rounded-md px-3 py-1 text-sm font-medium capitalize', view === v ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500')}
+                    role="tab"
+                    aria-selected={!mode3d && view === v}
+                    onClick={() => showSide(v)}
+                    className={cx('rounded-md px-2.5 py-1 text-sm font-medium', !mode3d && view === v ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700')}
                   >
-                    {v}
+                    {SIDE_LABEL[v]}
                   </button>
                 ))}
               </div>
-              <span className="flex items-center gap-1 text-xs text-slate-500">
-                <Move className="h-3.5 w-3.5" /> Drag artwork to position
-              </span>
+              <button
+                type="button"
+                onClick={() => setMode3d((m) => !m)}
+                aria-pressed={mode3d}
+                className={cx(
+                  'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-semibold transition',
+                  mode3d ? 'border-brand-600 bg-brand-600 text-white' : 'border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100'
+                )}
+              >
+                {mode3d ? <PenTool className="h-4 w-4" /> : <Box className="h-4 w-4" />}
+                {mode3d ? 'Back to editing' : 'View in 3D'}
+              </button>
             </div>
-            <div className="checkerboard px-6 py-4 sm:px-12">
-              <TShirtPreview specs={specs} view={view} editable onPositionChange={(designPosition) => update({ designPosition })} showPrintArea />
-            </div>
-            <div className="border-t border-slate-100 px-4 py-3">
-              <label htmlFor="scale" className="flex items-center justify-between text-xs font-medium text-slate-600">
-                Artwork size <span className="font-mono">{Math.round((specs.designPosition.scale || 1) * 100)}%</span>
-              </label>
-              <input
-                id="scale"
-                type="range"
-                min="0.5"
-                max="2"
-                step="0.05"
-                value={specs.designPosition.scale || 1}
-                onChange={(e) => update({ designPosition: { ...specs.designPosition, scale: Number(e.target.value) } })}
-                className="mt-1 w-full accent-brand-600"
-              />
-            </div>
+            {mode3d ? (
+              <Suspense fallback={<div className="flex h-[26rem] items-center justify-center"><Spinner label="Loading 3D viewer…" /></div>}>
+                <Shirt3DViewer specs={specs} className="bg-gradient-to-b from-slate-50 to-slate-200" />
+              </Suspense>
+            ) : (
+              <>
+                <div className="checkerboard px-6 py-4 sm:px-12">
+                  <TShirtPreview specs={specs} view={view} editable selectedId={selectedId} onSelect={selectLayer} onLayerMove={moveLayer} showPrintArea />
+                </div>
+                <p className="flex items-center justify-center gap-1 border-t border-slate-100 px-4 py-2 text-xs text-slate-500">
+                  <Move className="h-3.5 w-3.5" /> Click a layer to select it, drag to position. The dashed box is the printable area.
+                </p>
+              </>
+            )}
           </Card>
 
           <Card className="mt-4 p-4">
@@ -286,7 +321,8 @@ export default function CreateRFQ() {
                 ['Garment', specs.garmentType],
                 ['Fabric', `${specs.fabric}, ${specs.gsm} GSM`],
                 ['Base colour', specs.color],
-                ['Print', `${specs.printType} · ${PLACEMENT_LABEL[specs.printPlacement]}`],
+                ['Print', specs.printType],
+                ['Printed sides', sidesPrinted.length ? sidesPrinted.map((side) => SIDE_LABEL[side]).join(', ') : 'None yet'],
                 ['Quantity', `${total} pcs`],
                 ['Delivery', minDays ? `${deliveryDays ?? minDays} days` : '—'],
               ].map(([k, v]) => (
@@ -377,7 +413,7 @@ export default function CreateRFQ() {
             </div>
           </Section>
 
-          <Section step="4" title="Print method & placement" icon={Sparkles} subtitle="Vendors are matched on this capability (PERA participant lock).">
+          <Section step="4" title="Print method" icon={Sparkles} subtitle="Vendors are matched on this capability (PERA participant lock).">
             <div className="grid gap-2 sm:grid-cols-2">
               {catalog.printTypes.map((p) => (
                 <OptionCard key={p} selected={specs.printType === p} onClick={() => update({ printType: p })} title={p} description={PRINT_TYPE_INFO[p]?.blurb} icon={PRINT_ICONS[p]} />
@@ -388,49 +424,20 @@ export default function CreateRFQ() {
                 Sublimation works best on polyester (Dry-Fit). On cotton, colours may look faded. Consider switching fabric or print method.
               </Alert>
             )}
-            <p className="mb-2 mt-4 text-sm font-medium text-slate-700">Placement</p>
-            <div className="grid grid-cols-3 gap-2">
-              {catalog.printPlacements.map((p) => (
-                <OptionCard key={p} compact selected={specs.printPlacement === p} onClick={() => update({ printPlacement: p })} title={PLACEMENT_LABEL[p]} />
-              ))}
-            </div>
           </Section>
 
-          <Section step="5" title="Artwork" icon={Type}>
-            <div className="space-y-4">
-              <Field label={specs.printPlacement === 'BACK' ? 'Print text' : 'Front text'} hint={`${specs.customText.length}/120 characters`}>
-                <Input value={specs.customText} maxLength={120} onChange={(e) => update({ customText: e.target.value })} placeholder="e.g. COLOMBO MARATHON 2026" />
-              </Field>
-              {specs.printPlacement === 'FRONT_AND_BACK' && (
-                <Field label="Back text" hint="Printed large across the back">
-                  <Input value={specs.backText} maxLength={120} onChange={(e) => update({ backText: e.target.value })} placeholder="e.g. VOLUNTEER" />
-                </Field>
-              )}
-              <div>
-                <p className="mb-2 text-sm font-medium text-slate-700">Text / thread colour</p>
-                <div className="flex flex-wrap items-center gap-2">
-                  {TEXT_SWATCHES.map((hex) => (
-                    <button
-                      key={hex}
-                      type="button"
-                      aria-label={`Text colour ${hex}`}
-                      onClick={() => update({ textColor: hex })}
-                      className={cx('h-7 w-7 rounded-full border border-slate-300', specs.textColor.toUpperCase() === hex ? 'ring-2 ring-brand-500 ring-offset-2' : '')}
-                      style={{ backgroundColor: hex }}
-                    />
-                  ))}
-                  <input type="color" value={specs.textColor} onChange={(e) => update({ textColor: e.target.value.toUpperCase() })} className="h-7 w-9 cursor-pointer rounded border border-slate-300 bg-white p-0.5" aria-label="Custom text colour" />
-                </div>
-              </div>
-              <Field label="Logo">
-                <LogoUploader value={specs.logoUrl} onChange={(logoUrl) => update({ logoUrl })} />
-              </Field>
-              {specs.printPlacement === 'FRONT_AND_BACK' && (
-                <button type="button" onClick={() => setView(view === 'front' ? 'back' : 'front')} className="flex items-center gap-1.5 text-sm font-medium text-brand-700 hover:underline">
-                  <ArrowLeftRight className="h-4 w-4" /> Show {view === 'front' ? 'back' : 'front'} side
-                </button>
-              )}
-            </div>
+          <Section step="5" title="Artwork" icon={PenTool} subtitle="Add text and images to the front, back and sleeves. Each extra printed side adds one production day.">
+            <ArtworkEditor
+              specs={specs}
+              side={view}
+              onSideChange={showSide}
+              selectedId={selectedId}
+              onSelect={(id) => {
+                selectLayer(id);
+                if (id) setMode3d(false);
+              }}
+              onChange={update}
+            />
           </Section>
 
           <Section step="6" title="Size breakdown" icon={Ruler} subtitle={`Minimum order quantity: ${moq} pieces`}>
@@ -490,14 +497,14 @@ export default function CreateRFQ() {
         <div className="space-y-4">
           <div className="flex gap-4">
             <div className="w-28 shrink-0 rounded-xl bg-slate-50 p-2">
-              <TShirtPreview specs={specs} view={specs.printPlacement === 'BACK' ? 'back' : 'front'} />
+              <TShirtPreview specs={specs} view={sidesPrinted[0] === 'back' ? 'back' : 'front'} />
             </div>
             <ul className="space-y-1 text-sm text-slate-700">
               <li>
                 <strong>{total} pcs</strong> {specs.garmentType}, {specs.fabric} {specs.gsm} GSM
               </li>
               <li>
-                {specs.printType} · {PLACEMENT_LABEL[specs.printPlacement]}
+                {specs.printType} · {sidesPrinted.map((side) => SIDE_LABEL[side]).join(', ')}
               </li>
               <li>Delivery within {deliveryDays} days</li>
               {preview && <li>{preview.eligibleVendorCount} prequalified vendor(s) will be notified instantly</li>}

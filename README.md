@@ -53,7 +53,7 @@ Use separate browser profiles (or one incognito window per role) to watch the re
 ## Viva demo script (~10 minutes)
 
 1. **PERA:** log in as `vendor4`. *Live RFQs* is locked. As admin, open **Vendors → Review & verify** (checklist + license date). Vendor4's screen unlocks with no refresh.
-2. **Module 1:** as the buyer, open **Design & Launch**. Switch to *Polo*, *Embroidery*, front & back, and drag the logo. Fill the size matrix; the MOQ, delivery days and eligible-vendor count update live. Launch, and note the CPAPO lock.
+2. **Module 1:** as the buyer, open **Design & Launch**. Switch to *Polo* and *Embroidery*. Add text in different fonts and an image on the front, a second image on the back and a number on a sleeve, then drag them into place. Click **View in 3D** and rotate the garment. Fill the size matrix; the MOQ, delivery days and eligible-vendor count update live. Launch, and note the CPAPO lock.
 3. **Module 2:** vendors bid from the live feed; re-bid lower with the −2% button. The buyer's leaderboard re-ranks and flashes, while vendors see only their rank. Bid in the last 2 minutes to trigger the soft-close extension. Spread prices widely to trigger the variance warning.
 4. **Module 3:** accept a bid, then pay with `4242 4242 4242 4242` (try `4000 0000 0000 0002` for a decline). The vendor advances production (30% released to the wallet), then marks it ready. The buyer reveals the PIN or QR, the vendor enters it, 70% is released, and the buyer rates the vendor (trust score before → after).
 5. **Disputes:** on another order, raise a dispute with heated wording. The vendor sees a softened message; the admin sees the verbatim statement, a tone flag and a split-settlement slider.

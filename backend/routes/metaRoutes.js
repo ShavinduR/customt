@@ -28,6 +28,7 @@ router.get('/catalog', (_req, res) => {
     gsmOptions: C.GSM_OPTIONS,
     printTypes: C.PRINT_TYPES,
     printPlacements: C.PRINT_PLACEMENTS,
+    design: C.DESIGN,
     sizes: C.SIZES,
     skillBadges: C.SKILL_BADGES,
     minOrderQuantity: C.MIN_ORDER_QUANTITY,
