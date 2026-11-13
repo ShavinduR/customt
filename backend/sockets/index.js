@@ -22,6 +22,9 @@ const auctionService = require('../services/auctionService');
 const chatService = require('../services/chatService');
 const realtime = require('../services/realtime');
 
+const EVENT_WINDOW_MS = 10 * 1000;
+const EVENT_LIMIT = 40;
+
 function safeAck(ack) {
   return typeof ack === 'function' ? ack : () => {};
 }
@@ -36,9 +39,10 @@ function registerSocketHandlers(io) {
   io.use(async (socket, next) => {
     try {
       const token = socket.handshake.auth?.token || extractBearer(socket.handshake.headers?.authorization);
-      const user = await resolveUserFromToken(token);
+      const { user, issuedAt } = await resolveUserFromToken(token);
       socket.data.userId = String(user._id);
       socket.data.role = user.role;
+      socket.data.issuedAt = issuedAt;
       next();
     } catch (err) {
       const e = new Error(err.message || 'Unauthorized');
@@ -53,15 +57,32 @@ function registerSocketHandlers(io) {
     socket.join(realtime.rooms.role(role));
     socket.emit('connected', { userId, role, at: new Date() });
 
-    // Always load a fresh user so verification/suspension changes take effect immediately.
+    // Always load a fresh user so verification/suspension/password changes take effect immediately.
     const currentUser = async () => {
       const user = await User.findById(userId);
-      if (!user || !user.isActive) {
+      if (!user || !user.isActive || user.tokenIssuedBeforePasswordChange(socket.data.issuedAt)) {
         socket.disconnect(true);
-        throw new Error('Account unavailable');
+        throw new Error('Session no longer valid - please log in again');
       }
       return user;
     };
+
+    // Per-connection flood protection: at most EVENT_LIMIT client events per EVENT_WINDOW_MS.
+    let windowStart = Date.now();
+    let eventsInWindow = 0;
+    socket.use((packet, next) => {
+      const now = Date.now();
+      if (now - windowStart > EVENT_WINDOW_MS) {
+        windowStart = now;
+        eventsInWindow = 0;
+      }
+      eventsInWindow += 1;
+      if (eventsInWindow <= EVENT_LIMIT) return next();
+      // Drop the event but still answer it, so the client's promise settles.
+      const ack = packet[packet.length - 1];
+      safeAck(ack)({ ok: false, error: { status: 429, message: 'Too many requests - please slow down.', code: 'SOCKET_RATE_LIMIT' } });
+      return undefined;
+    });
 
     socket.on('rfq:join', async (payload, ack) => {
       const reply = safeAck(ack);

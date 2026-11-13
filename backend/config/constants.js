@@ -67,6 +67,7 @@ const AUCTION = Object.freeze({
   PRICE_CV_MIN_BIDS: 3,
   MAX_LEAD_TIME_DAYS: 120,
   MAX_NOTES_LENGTH: 500,
+  MIN_LEAD_TIME_RATIO: 0.5, // bids must quote at least half of the platform's realistic production estimate
 });
 
 const RFQ_STATUS = Object.freeze({
@@ -132,6 +133,8 @@ const TRUST = Object.freeze({
   MAX: 5,
   EWMA_OLD_WEIGHT: 0.7,
   EWMA_NEW_WEIGHT: 0.3,
+  // Anti-collusion: only one rating per buyer-vendor pair in this window changes the trust score.
+  PAIR_RATING_WINDOW_DAYS: 30,
 });
 
 const DISPUTE_CATEGORIES = Object.freeze({

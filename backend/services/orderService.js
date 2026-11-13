@@ -21,6 +21,9 @@ const {
 const { generateCode, generateNumericPin, safeEqual, roundMoney, round, idEquals, assertObjectId } = require('../utils/helpers');
 const { KeyedMutex, auctionMutex } = require('../utils/keyedMutex');
 const politeness = require('../utils/politenessTemplates');
+const { maskContactInfo } = require('../utils/contactFilter');
+const { isUploadedFileUrl } = require('../utils/uploadUrl');
+const { sealPin, openPin } = require('../utils/pinVault');
 const paymentGateway = require('./mockPaymentGateway');
 const auctionService = require('./auctionService');
 const realtime = require('./realtime');
@@ -82,6 +85,12 @@ function notifyOrderParties(order, event, extra = {}) {
   realtime.emitToRole(ROLES.ADMIN, event, payload);
 }
 
+/** Compares phone numbers by their last 9 digits (ignores +94 / 0 prefixes, spaces and dashes). */
+function samePhone(a, b) {
+  const tail = (p) => String(p || '').replace(/\D/g, '').slice(-9);
+  return tail(a).length === 9 && tail(a) === tail(b);
+}
+
 async function buildO2OQr(order, pin) {
   return QRCode.toDataURL(JSON.stringify({ type: 'CUSTOMT_O2O', orderCode: order.orderCode, pin }), {
     errorCorrectionLevel: 'M',
@@ -110,6 +119,14 @@ async function acceptBid(buyer, rfqId, bidId) {
     if (!bid) throw ApiError.notFound('Bid not found on this RFQ');
 
     const vendor = await User.findById(bid.vendorId);
+    // Self-dealing guard: a buyer account and a vendor account registered with the same phone number
+    // belong to the same person, who could otherwise pay themselves with the mock gateway and rate
+    // themselves 5 stars to inflate their trust score (and so their rank in every other auction).
+    if (vendor && samePhone(vendor.phone, buyer.phone)) {
+      throw ApiError.forbidden('This bid comes from a vendor account linked to your own phone number, so it cannot be accepted.', {
+        code: 'SELF_DEALING',
+      });
+    }
     if (!vendor || vendor.qualificationIssues().length) {
       throw ApiError.conflict('This vendor is no longer prequalified on CustomT. Please choose another bid.', {
         code: 'VENDOR_NOT_QUALIFIED',
@@ -261,15 +278,16 @@ async function advanceProduction(vendor, orderId, nextStatus, note = '') {
       );
     }
 
-    const cleanNote = typeof note === 'string' ? note.trim().slice(0, 300) : '';
+    const cleanNote = typeof note === 'string' ? maskContactInfo(note.trim().slice(0, 300)) : '';
     order.productionStatus = nextStatus;
     order.productionTimeline.push({ status: nextStatus, note: cleanNote, actorId: vendor._id });
     let message = `Production update: ${nextStatus.replace(/_/g, ' ').toLowerCase()}.`;
     let pin = null;
+    let creditVendor = 0;
 
     if (nextStatus === PRODUCTION_STATUS.IN_PRODUCTION && !order.advanceReleased) {
-      // Milestone 1 - release the 30% booking advance.
-      await User.updateOne({ _id: order.vendorId }, { $inc: { walletBalance: order.advanceAmount } });
+      // Milestone 1 - release the 30% booking advance (credited to the wallet after the order is saved).
+      creditVendor = order.advanceAmount;
       order.advanceReleased = true;
       order.advanceReleasedAt = new Date();
       order.escrowHeld = roundMoney(order.escrowHeld - order.advanceAmount);
@@ -280,14 +298,18 @@ async function advanceProduction(vendor, orderId, nextStatus, note = '') {
 
     if (nextStatus === PRODUCTION_STATUS.READY_FOR_INSPECTION) {
       pin = generateNumericPin(ESCROW.O2O_PIN_LENGTH);
-      order.o2oPin = pin;
+      order.o2oPin = sealPin(pin); // encrypted at rest
       order.o2oPinGeneratedAt = new Date();
       order.o2oAttempts = 0;
       order.orderStatus = ORDER_STATUS.AWAITING_O2O;
       message = 'Your order is ready for physical inspection. Share the O2O PIN with the vendor only after you are satisfied.';
     }
 
+    // Save first (optimistic concurrency: fails if anything else changed the order), then move money.
+    // If the process stops in between, the ledger entry exists and the wallet can be reconciled from it;
+    // a retry can never pay twice because advanceReleased is already true.
     await order.save();
+    if (creditVendor > 0) await User.updateOne({ _id: order.vendorId }, { $inc: { walletBalance: creditVendor } });
     notifyOrderParties(order, 'order:updated', { message });
 
     if (pin) {
@@ -310,11 +332,13 @@ async function getO2OPin(buyer, orderId) {
   if (!order.o2oPin || ![ORDER_STATUS.AWAITING_O2O, ORDER_STATUS.DISPUTED].includes(order.orderStatus)) {
     throw ApiError.conflict('An O2O PIN is only available once the vendor marks the order ready for inspection');
   }
+  const pin = openPin(order.o2oPin);
+  if (!pin) throw ApiError.conflict('This PIN can no longer be shown. Generate a new PIN.', { code: 'O2O_PIN_UNREADABLE' });
   return {
     orderId: String(order._id),
     orderCode: order.orderCode,
-    pin: order.o2oPin,
-    qrDataUrl: await buildO2OQr(order, order.o2oPin),
+    pin,
+    qrDataUrl: await buildO2OQr(order, pin),
     generatedAt: order.o2oPinGeneratedAt,
     attemptsUsed: order.o2oAttempts,
     attemptsRemaining: Math.max(0, ESCROW.O2O_MAX_ATTEMPTS - order.o2oAttempts),
@@ -327,7 +351,7 @@ async function regenerateO2OPin(buyer, orderId) {
     const order = await loadOrderForUser(orderId, buyer, { withPin: true });
     if (!idEquals(order.buyerId, buyer._id)) throw ApiError.forbidden('Only the buyer can regenerate the O2O PIN');
     if (order.orderStatus !== ORDER_STATUS.AWAITING_O2O) throw ApiError.conflict('The order is not awaiting O2O verification');
-    order.o2oPin = generateNumericPin(ESCROW.O2O_PIN_LENGTH);
+    order.o2oPin = sealPin(generateNumericPin(ESCROW.O2O_PIN_LENGTH));
     order.o2oPinGeneratedAt = new Date();
     order.o2oAttempts = 0;
     order.productionTimeline.push({ status: 'O2O_PIN_REGENERATED', actorId: buyer._id });
@@ -345,7 +369,6 @@ async function regenerateO2OPin(buyer, orderId) {
 /** Milestone 2 - release the remaining 70% and complete the order. Call inside the order lock. */
 async function completeOrder(order, method, actorId) {
   const amount = order.escrowHeld;
-  await User.updateOne({ _id: order.vendorId }, { $inc: { walletBalance: amount } });
   const now = new Date();
   order.escrowLedger.push({ type: 'FINAL_RELEASE', amount, toUserId: order.vendorId, note: `70% final settlement via ${method}` });
   order.escrowHeld = 0;
@@ -359,7 +382,8 @@ async function completeOrder(order, method, actorId) {
   order.o2oPin = undefined;
   order.completedAt = now;
   order.productionTimeline.push({ status: 'DELIVERED', note: `O2O verified (${method})`, actorId });
-  await order.save();
+  await order.save(); // version-checked: a second concurrent completion fails here, before any money moves
+  await User.updateOne({ _id: order.vendorId }, { $inc: { walletBalance: amount } });
 
   realtime.emitToUser(order.buyerId, 'order:completed', {
     orderId: String(order._id),
@@ -398,7 +422,8 @@ async function verifyO2OPin(vendor, orderId, pin) {
     const cleanPin = String(pin || '').trim();
     if (!/^\d{6}$/.test(cleanPin)) throw ApiError.badRequest('The O2O PIN must be exactly 6 digits');
 
-    if (!safeEqual(cleanPin, order.o2oPin)) {
+    const expectedPin = openPin(order.o2oPin);
+    if (!expectedPin || !safeEqual(cleanPin, expectedPin)) {
       order.o2oAttempts += 1;
       await order.save();
       const remaining = Math.max(0, ESCROW.O2O_MAX_ATTEMPTS - order.o2oAttempts);
@@ -451,14 +476,28 @@ async function rateVendor(buyer, orderId, { rating, review }) {
       const vendor = await User.findById(order.vendorId);
       if (!vendor) throw ApiError.notFound('Vendor not found');
       const trustBefore = vendor.trustScore;
-      const trustAfter = nextTrustScore(trustBefore, value);
-      await User.updateOne({ _id: vendor._id }, { $set: { trustScore: trustAfter }, $inc: { ratingCount: 1 } });
+      // Anti-collusion: repeated ratings from the same buyer within the window are recorded but do not
+      // move the trust score, so a buyer-vendor pair can't pump trust with many small staged orders.
+      const since = new Date(Date.now() - TRUST.PAIR_RATING_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+      const recentPairRating = await Order.exists({
+        _id: { $ne: order._id },
+        buyerId: order.buyerId,
+        vendorId: order.vendorId,
+        'buyerRating.countedInTrust': { $ne: false },
+        'buyerRating.ratedAt': { $gte: since },
+      });
+      const countedInTrust = !recentPairRating;
+      const trustAfter = countedInTrust ? nextTrustScore(trustBefore, value) : trustBefore;
+      if (countedInTrust) {
+        await User.updateOne({ _id: vendor._id }, { $set: { trustScore: trustAfter }, $inc: { ratingCount: 1 } });
+      }
 
       order.buyerRating = {
         rating: value,
-        review: typeof review === 'string' ? review.trim().slice(0, 1000) : '',
+        review: typeof review === 'string' ? maskContactInfo(review.trim().slice(0, 1000)) : '',
         trustBefore,
         trustAfter,
+        countedInTrust,
         ratedAt: new Date(),
       };
       await order.save();
@@ -470,7 +509,7 @@ async function rateVendor(buyer, orderId, { rating, review }) {
         trustScore: trustAfter,
         previousTrustScore: trustBefore,
       });
-      return { order, trustBefore, trustAfter };
+      return { order, trustBefore, trustAfter, countedInTrust };
     });
   });
 }
@@ -484,7 +523,7 @@ function validateEvidence(urls) {
   if (!Array.isArray(urls) || urls.length > 5) throw ApiError.badRequest('Provide up to 5 evidence URLs');
   return urls.map((u) => {
     const s = String(u).trim();
-    if (!/^(https?:\/\/|\/uploads\/)/i.test(s)) throw ApiError.badRequest(`Invalid evidence URL: ${s}`);
+    if (!isUploadedFileUrl(s)) throw ApiError.badRequest('Evidence must be images uploaded to CustomT');
     return s;
   });
 }
@@ -544,7 +583,8 @@ async function raiseDispute(buyer, orderId, { category, description, desiredReso
     order.productionTimeline.push({ status: 'DISPUTE_RAISED', note: politeness.categoryLabel(category), actorId: buyer._id });
 
     const acknowledgement = politeness.buyerAcknowledgement(ctx);
-    const vendorMessage = politeness.vendorNotification(ctx);
+    // The vendor sees a softened summary; contact details in the buyer's text are masked (admins see the original).
+    const vendorMessage = politeness.vendorNotification({ ...ctx, description: maskContactInfo(text) });
     order.disputeNotes.push(
       { authorRole: 'system', audience: 'buyer', template: 'BUYER_ACKNOWLEDGEMENT', message: acknowledgement },
       { authorRole: 'system', audience: 'vendor', template: 'VENDOR_NOTIFICATION', message: vendorMessage },
@@ -572,7 +612,7 @@ async function addDisputeNote(user, orderId, message) {
       authorRole: user.role,
       audience: 'all',
       template: 'FOLLOW_UP',
-      message: politeness.followUpNote({ authorName: user.companyName || user.name, authorRole: user.role, message: text }),
+      message: politeness.followUpNote({ authorName: user.companyName || user.name, authorRole: user.role, message: user.role === ROLES.ADMIN ? text : maskContactInfo(text) }),
     };
     order.disputeNotes.push(note);
     await order.save();
@@ -637,11 +677,9 @@ async function resolveDispute(admin, orderId, { resolution, vendorPercent, notes
     }
 
     if (vendorAmount > 0) {
-      await User.updateOne({ _id: vendorId }, { $inc: { walletBalance: vendorAmount } });
       order.escrowLedger.push({ type: 'DISPUTE_RELEASE', amount: vendorAmount, toUserId: vendorId, note: `Dispute resolution: ${resolution}` });
     }
     if (buyerAmount > 0) {
-      await User.updateOne({ _id: buyerId }, { $inc: { walletBalance: buyerAmount } });
       order.escrowLedger.push({ type: 'REFUND', amount: buyerAmount, toUserId: buyerId, note: `Dispute resolution: ${resolution}` });
       order.refundedAmount = roundMoney((order.refundedAmount || 0) + buyerAmount);
     }
@@ -670,7 +708,9 @@ async function resolveDispute(admin, orderId, { resolution, vendorPercent, notes
       { authorId: admin._id, authorRole: ROLES.ADMIN, audience: 'buyer', template: 'RESOLUTION', message: buyerMsg },
       { authorId: admin._id, authorRole: ROLES.ADMIN, audience: 'vendor', template: 'RESOLUTION', message: vendorMsg }
     );
-    await order.save();
+    await order.save(); // version-checked before any wallet is credited
+    if (vendorAmount > 0) await User.updateOne({ _id: vendorId }, { $inc: { walletBalance: vendorAmount } });
+    if (buyerAmount > 0) await User.updateOne({ _id: buyerId }, { $inc: { walletBalance: buyerAmount } });
 
     const base = { orderId: String(order._id), orderCode: order.orderCode, resolution, orderStatus: order.orderStatus, escrowStatus: order.escrowStatus };
     realtime.emitToUser(buyerId, 'dispute:resolved', { ...base, message: buyerMsg, promptRating: order.orderStatus === ORDER_STATUS.COMPLETED });
@@ -711,6 +751,7 @@ module.exports = {
   verifyO2OPin,
   buyerApproveInspection,
   nextTrustScore,
+  samePhone,
   rateVendor,
   raiseDispute,
   addDisputeNote,

@@ -621,3 +621,45 @@ test('password reset: generic answer, e-mailed single-use link, old sessions sig
   assert.equal((await api('GET', '/auth/me', login.token)).status, 401, 'other sessions are signed out');
   assert.equal((await api('GET', '/auth/me', changed.token)).status, 200, 'the current session stays logged in');
 });
+
+// ── 20. Security hardening ───────────────────────────────────────────────────────────────
+test('security: contact details are masked outside chat, self-dealing and impossible lead times are blocked', async () => {
+  // A buyer account registered with the same phone number as vendor Alpha.
+  const self = await ok('POST', '/auth/register', null, { role: 'buyer', name: 'Same Person', email: 'self@e2e.test', password: 'Buyer1234', phone: '+94 77 000 0000' });
+
+  const badName = await api('POST', '/auth/register', null, { role: 'buyer', name: 'Call 0771234567', email: 'n@e2e.test', password: 'Buyer1234', phone: '+94771111111' });
+  assert.equal(badName.status, 400);
+  assert.equal(badName.body.code, 'CONTACT_INFO_IN_NAME');
+
+  const external = await api('POST', '/rfqs', self.token, {
+    title: 'Pixel test',
+    designSpecs: { ...SPECS, customText: undefined, textLayers: [], imageLayers: [{ id: 'i1', side: 'front', url: 'https://evil.example/pixel.png', x: 50, y: 50, scale: 0.5 }] },
+  });
+  assert.equal(external.status, 400, 'design images must be CustomT uploads');
+
+  const rfq = (await ok('POST', '/rfqs', self.token, { title: 'Self-dealing tees', description: 'WhatsApp me on 077 123 4567 for details', designSpecs: SPECS })).rfq;
+  assert.ok(!/4567|whatsapp/i.test(rfq.description), `description is masked: ${rfq.description}`);
+
+  const tooFast = await api('POST', `/rfqs/${rfq._id}/bids`, S.v1.token, { price: 50000, leadTimeDays: 1 });
+  assert.equal(tooFast.status, 400);
+  assert.equal(tooFast.body.code, 'LEAD_TIME_TOO_SHORT');
+
+  const bid = await ok('POST', `/rfqs/${rfq._id}/bids`, S.v1.token, { price: 50000, leadTimeDays: 8, notes: 'Call me on 0771234567' });
+  const board = await ok('GET', `/rfqs/${rfq._id}`, self.token);
+  assert.ok(board.leaderboard[0].notes.includes('[CONTACT BLOCKED]'), 'bid notes shown to the buyer are masked');
+
+  const accept = await api('POST', `/rfqs/${rfq._id}/bids/${bid.myBid.bidId}/accept`, self.token);
+  assert.equal(accept.status, 403);
+  assert.equal(accept.body.code, 'SELF_DEALING');
+
+  // Live sockets close when the password changes.
+  const socket = await connect(self.token);
+  const closed = new Promise((resolve) => socket.once('disconnect', resolve));
+  await sleep(1100);
+  await ok('PATCH', '/auth/me/password', self.token, { currentPassword: 'Buyer1234', newPassword: 'Changed1234' });
+  await Promise.race([closed, sleep(3000).then(() => assert.fail('socket was not disconnected after the password change'))]);
+
+  // O2O PINs are stored encrypted.
+  const stored = await Order.findOne({ o2oPin: { $exists: true } }).select('+o2oPin').lean();
+  if (stored) assert.ok(!/^\d{6}$/.test(stored.o2oPin), 'O2O PIN is not stored in plain text');
+});
