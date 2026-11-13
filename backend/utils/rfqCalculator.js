@@ -9,10 +9,10 @@ const {
   PRINT_PLACEMENTS,
   DESIGN,
 } = require('../config/constants');
+const { isUploadedFileUrl } = require('./uploadUrl');
 const ApiError = require('./ApiError');
 
 const HEX_COLOR = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
-const IMAGE_URL = /^(https?:\/\/|\/uploads\/)/i;
 
 /** Normalises a size matrix into { S, M, L, XL, XXL } of non-negative integers. */
 function normaliseSizeBreakdown(raw = {}) {
@@ -117,7 +117,7 @@ function validateLayers(rawText, rawImages) {
     const url = typeof layer.url === 'string' ? layer.url.trim() : '';
     const n = i + 1;
     if (!DESIGN.SIDES.includes(layer.side)) errors.push(`Image ${n}: side must be one of ${DESIGN.SIDES.join(', ')}`);
-    if (!IMAGE_URL.test(url) || url.length > 500) errors.push(`Image ${n}: use an uploaded image (http(s) URL or /uploads/ path)`);
+    if (!isUploadedFileUrl(url)) errors.push(`Image ${n}: use an image uploaded to CustomT (POST /api/uploads/logo)`);
     return {
       id: cleanId(layer.id, `i${n}`),
       side: layer.side,
@@ -154,7 +154,7 @@ function buildDesignSpecs(input = {}) {
     if (typeof input.customText === 'string' && input.customText.trim().length > 120) errors.push('customText must be 120 characters or fewer');
     if (typeof input.backText === 'string' && input.backText.trim().length > 120) errors.push('backText must be 120 characters or fewer');
     const logo = typeof input.logoUrl === 'string' ? input.logoUrl.trim() : '';
-    if (logo && !IMAGE_URL.test(logo)) errors.push('logoUrl must be an http(s) URL or a path returned by /api/uploads/logo');
+    if (logo && !isUploadedFileUrl(logo)) errors.push('logoUrl must be a URL returned by /api/uploads/logo');
   }
   const source = layered ? { textLayers: input.textLayers || [], imageLayers: input.imageLayers || [] } : legacyLayers(input);
   const { errors: layerErrors, textLayers, imageLayers } = validateLayers(source.textLayers, source.imageLayers);

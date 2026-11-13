@@ -9,6 +9,7 @@ const { generateCode, roundMoney, idEquals, assertObjectId } = require('../utils
 const { buildDesignSpecs, calculateExpectedDeliveryDays } = require('../utils/rfqCalculator');
 const { scoreBids, computePriceDiagnostic } = require('./scoringEngine');
 const { auctionMutex } = require('../utils/keyedMutex');
+const { maskContactInfo } = require('../utils/contactFilter');
 const realtime = require('./realtime');
 
 const VENDOR_PUBLIC_FIELDS = 'name companyName skillBadges trustScore ratingCount';
@@ -178,7 +179,8 @@ async function previewRfq(input) {
 }
 
 async function createRfq(buyer, input) {
-  const title = typeof input.title === 'string' ? input.title.trim() : '';
+  // Title and description are shown to every eligible vendor: mask contact details (keep deals on-platform).
+  const title = typeof input.title === 'string' ? maskContactInfo(input.title.trim()).slice(0, 120) : '';
   if (title.length < 3) throw ApiError.badRequest('Please give your RFQ a title of at least 3 characters');
 
   const designSpecs = buildDesignSpecs(input.designSpecs || input);
@@ -214,7 +216,7 @@ async function createRfq(buyer, input) {
     rfqCode: generateCode('RFQ'),
     buyerId: buyer._id,
     title,
-    description: typeof input.description === 'string' ? input.description.trim().slice(0, 1000) : '',
+    description: typeof input.description === 'string' ? maskContactInfo(input.description.trim().slice(0, 1000)) : '',
     designSpecs,
     expectedDeliveryDays,
     status: RFQ_STATUS.OPEN,
@@ -270,7 +272,8 @@ function validateBidInput({ price, leadTimeDays, notes }) {
   if (!Number.isInteger(lead) || lead < 1 || lead > AUCTION.MAX_LEAD_TIME_DAYS) {
     errors.push(`leadTimeDays must be a whole number between 1 and ${AUCTION.MAX_LEAD_TIME_DAYS}`);
   }
-  const cleanNotes = typeof notes === 'string' ? notes.trim() : '';
+  // Notes are shown to the buyer, so contact details are masked like chat messages.
+  const cleanNotes = typeof notes === 'string' ? maskContactInfo(notes.trim()) : '';
   if (cleanNotes.length > AUCTION.MAX_NOTES_LENGTH) errors.push(`notes must be ${AUCTION.MAX_NOTES_LENGTH} characters or fewer`);
   if (errors.length) throw ApiError.badRequest('Invalid bid', { details: errors });
   return { price: roundMoney(numericPrice), leadTimeDays: lead, notes: cleanNotes };
@@ -372,6 +375,13 @@ async function placeBid(vendorId, rfqId, input) {
         code: vendor.qualificationIssues().length ? 'PERA_QUALIFICATION_LOCK' : 'PERA_PARTICIPANT_LOCK',
         details: eligibility.reasons,
       });
+    }
+
+    // Anti-gaming: lead time is 20% of the score, so an impossible "1 day" quote would buy rank.
+    // Quotes below half of the platform's realistic production estimate are rejected.
+    const minLeadTime = Math.ceil(calculateExpectedDeliveryDays(rfq.designSpecs) * AUCTION.MIN_LEAD_TIME_RATIO);
+    if (clean.leadTimeDays < minLeadTime) {
+      throw ApiError.badRequest(`For this order the shortest credible lead time is ${minLeadTime} days`, { code: 'LEAD_TIME_TOO_SHORT' });
     }
 
     const unitPrice = roundMoney(clean.price / rfq.designSpecs.totalQuantity);

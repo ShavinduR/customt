@@ -60,7 +60,7 @@ npm run seed:admin                       # admin only: production
 npm run seed                             # admin + demo buyer/vendors: demo/viva environments only
 ```
 
-Set `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` first, and change the password after the first login (*Account → Change password*).
+Set `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` first (and `SEED_DEMO_PASSWORD` for `npm run seed`). With `NODE_ENV=production` the seed refuses to run unless these passwords are at least 12 characters with letters and digits, so the default demo passwords from the README can never reach a live database. Change the password after the first login (*Account → Change password*).
 
 **Verify:** `https://<api>/api/health` returns `{"success":true,"db":"connected"}`.
 
@@ -83,6 +83,8 @@ SendGrid and Mailgun also offer port 2525. On a paid Render plan, any SMTP provi
 ```
 VITE_API_URL = https://customt-api.onrender.com
 ```
+
+**Security headers.** `frontend/vercel.json` sends a Content-Security-Policy that only allows the API at `https://customt-api.onrender.com` (HTTPS and WSS). If your Render service has a different URL, replace that host in `vercel.json` too, or API calls and live updates will be blocked by the browser.
 
 Deploy. `frontend/vercel.json` rewrites every path to `index.html`, so deep links such as `/buyer/rfqs/…` work after a refresh.
 

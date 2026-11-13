@@ -1,4 +1,5 @@
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
 const { User } = require('../models');
 const ApiError = require('../utils/ApiError');
@@ -7,6 +8,7 @@ const { signToken, protect } = require('../middleware/auth');
 const { ROLES, PRINT_TYPES } = require('../config/constants');
 const realtime = require('../services/realtime');
 const { requestPasswordReset, userFromResetToken } = require('../services/passwordReset');
+const { containsContactInfo } = require('../utils/contactFilter');
 
 const router = express.Router();
 
@@ -27,6 +29,9 @@ const resetRequestLimiter = rateLimit({
   message: { success: false, message: 'Too many reset requests. Please wait 15 minutes and try again.' },
 });
 
+// bcrypt hash (cost 12) of a random string; used only to equalise login timing for unknown e-mails.
+const DUMMY_HASH = bcrypt.hashSync(require('crypto').randomBytes(16).toString('hex'), 12);
+
 const PASSWORD_RULE = /^(?=.*[A-Za-z])(?=.*\d).{8,64}$/;
 const EMAIL_RULE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -36,6 +41,24 @@ function authResponse(user) {
     token: signToken(user),
     user: user.toJSON(),
   };
+}
+
+/**
+ * Names and company names are shown to the other party (leaderboard, chat, orders), so they must not
+ * carry phone numbers, e-mails, links or messaging handles that would bypass the chat filter.
+ */
+function assertCleanDisplayName(label, value) {
+  if (value !== undefined && value !== null && containsContactInfo(String(value))) {
+    throw ApiError.badRequest(`${label} must not contain phone numbers, e-mail addresses, links or messaging handles`, {
+      code: 'CONTACT_INFO_IN_NAME',
+    });
+  }
+}
+
+/** Disconnects every open Socket.IO connection of a user (after a password change or reset). */
+function disconnectUserSockets(userId) {
+  const io = realtime.getIO();
+  if (io) io.in(realtime.rooms.user(String(userId))).disconnectSockets(true);
 }
 
 function parseCapabilities(raw) {
@@ -71,6 +94,8 @@ router.post(
     if (!PASSWORD_RULE.test(String(password || ''))) {
       throw ApiError.badRequest('Password must be 8-64 characters and contain at least one letter and one number');
     }
+    assertCleanDisplayName('Name', name);
+    if (role === ROLES.VENDOR) assertCleanDisplayName('Company name', req.body.companyName);
     if (await User.exists({ email: String(email || '').toLowerCase().trim() })) {
       throw ApiError.conflict('An account with this email already exists');
     }
@@ -122,7 +147,9 @@ router.post(
     if (!email || !password) throw ApiError.badRequest('Email and password are required');
 
     const user = await User.findOne({ email }).select('+passwordHash');
-    if (!user || !(await user.comparePassword(password))) {
+    // Compare against a dummy hash when the account doesn't exist, so response time doesn't reveal which e-mails are registered.
+    const passwordOk = user ? await user.comparePassword(password) : await bcrypt.compare(password, DUMMY_HASH).then(() => false);
+    if (!user || !passwordOk) {
       throw ApiError.unauthorized('Incorrect email or password');
     }
     if (!user.isActive) throw ApiError.forbidden('Your account has been suspended. Please contact support.', { code: 'ACCOUNT_SUSPENDED' });
@@ -155,12 +182,19 @@ router.patch(
   protect,
   asyncHandler(async (req, res) => {
     const user = req.user;
+    assertCleanDisplayName('Name', req.body.name);
     if (req.body.name !== undefined) user.name = req.body.name;
     if (req.body.phone !== undefined) user.phone = req.body.phone;
 
     let requiresReverification = false;
     if (user.role === ROLES.VENDOR) {
-      if (req.body.companyName !== undefined) user.companyName = req.body.companyName;
+      if (req.body.companyName !== undefined) {
+        assertCleanDisplayName('Company name', req.body.companyName);
+        const next = String(req.body.companyName).trim();
+        // The verified business identity changes: an administrator must confirm it again.
+        if (next !== user.companyName) requiresReverification = true;
+        user.companyName = next;
+      }
       if (req.body.capabilities !== undefined) {
         const next = parseCapabilities(req.body.capabilities);
         if (next.some((c) => !user.capabilities.includes(c))) requiresReverification = true;
@@ -212,6 +246,8 @@ router.patch(
     }
     await user.setPassword(newPassword);
     await user.save({ validateModifiedOnly: true });
+    // Live sockets were authenticated with the old token: close them (this tab reconnects with the new token).
+    disconnectUserSockets(user._id);
     // Older sessions are now rejected, so hand this one a fresh token to stay logged in.
     res.json({ success: true, message: 'Password changed successfully. Other devices have been signed out.', token: signToken(user) });
   })
@@ -247,6 +283,7 @@ router.post(
     const user = await userFromResetToken(req.body.token);
     await user.setPassword(password); // also invalidates this link and signs out every existing session
     await user.save({ validateModifiedOnly: true });
+    disconnectUserSockets(user._id);
     res.json({ success: true, message: 'Your password has been reset. You can now log in with the new password.' });
   })
 );

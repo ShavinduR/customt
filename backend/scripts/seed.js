@@ -93,8 +93,26 @@ async function upsertUser(data, password) {
   return user;
 }
 
+/**
+ * The fallback passwords are published in the README, so a production database must never get them:
+ * in production the seed refuses to run unless strong passwords are supplied through the environment.
+ */
+function assertSafeSeedPasswords() {
+  if (!config.isProduction) return;
+  const strong = (p) => typeof p === 'string' && /^(?=.*[A-Za-z])(?=.*\d).{12,64}$/.test(p) && !/^(Admin|Demo)@12345$/.test(p);
+  const problems = [];
+  if (!strong(process.env.SEED_ADMIN_PASSWORD)) problems.push('SEED_ADMIN_PASSWORD (12+ characters, letters and digits)');
+  if (!adminOnly && !strong(process.env.SEED_DEMO_PASSWORD)) problems.push('SEED_DEMO_PASSWORD (12+ characters, letters and digits)');
+  if (problems.length) {
+    // eslint-disable-next-line no-console
+    console.error(`[seed] Refusing to seed production with default passwords. Set: ${problems.join(', ')}.`);
+    process.exit(1);
+  }
+}
+
 async function run() {
   assertRequiredEnv();
+  assertSafeSeedPasswords();
   await connectDB(config.mongoUri);
 
   // eslint-disable-next-line no-console
