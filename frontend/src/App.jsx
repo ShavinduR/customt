@@ -35,6 +35,7 @@ import AdminOrders from './pages/admin/AdminOrders';
 import AdminOrderDetail from './pages/admin/AdminOrderDetail';
 import Analytics from './pages/admin/Analytics';
 import UsersAdmin from './pages/admin/UsersAdmin';
+import Conversations from './pages/admin/Conversations';
 
 function HomeRoute() {
   const { user, initialising } = useAuth();
@@ -94,6 +95,7 @@ export default function App() {
                       <Route path="/admin/orders/:id" element={<AdminOrderDetail />} />
                       <Route path="/admin/analytics" element={<Analytics />} />
                       <Route path="/admin/users" element={<UsersAdmin />} />
+                      <Route path="/admin/messages" element={<Conversations />} />
                     </Route>
 
                     <Route path="*" element={<NotFound />} />

@@ -29,6 +29,7 @@ import EscrowBreakdown from '../../components/orders/EscrowBreakdown';
 import DisputeThread from '../../components/orders/DisputeThread';
 import SpecSummary from '../../components/auction/SpecSummary';
 import ReceiptButton from '../../components/orders/ReceiptButton';
+import OrderChat from '../../components/chat/OrderChat';
 import OtpInput from '../../components/vendor/OtpInput';
 import QrScanner, { qrScanSupported } from '../../components/vendor/QrScanner';
 import { Alert, Button, Card, CardHeader, ErrorList, Field, Modal, PageHeader, PageLoader, StatusBadge, Textarea, TrustStars } from '../../components/ui';
@@ -338,6 +339,8 @@ export default function VendorOrderDetail() {
 
           {order.orderStatus === 'REFUNDED' && <Alert tone="info" title="This order was refunded to the buyer after mediation." />}
           {order.orderStatus === 'CANCELLED' && <Alert tone="info" title="The buyer cancelled this order before funding escrow." />}
+
+          <OrderChat orderId={order._id} viewerRole="vendor" counterpartName={buyer.name} />
 
           {order.disputeNotes?.length > 0 && (
             <Card>

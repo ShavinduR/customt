@@ -38,7 +38,7 @@ Object.assign(process.env, {
 const { io: ioClient } = require('socket.io-client');
 const { start } = require('../../server');
 const { disconnectDB } = require('../../config/db');
-const { User, RFQ, Bid, Order } = require('../../models');
+const { User, RFQ, Bid, Order, Message } = require('../../models');
 const { closeExpiredAuctions, stopAuctionScheduler } = require('../../services/auctionService');
 const { getLastTestMessage } = require('../../services/mailer');
 
@@ -152,7 +152,7 @@ test.before(async () => {
   runtime = await start();
   if (!runtime.server.listening) await new Promise((r) => runtime.server.once('listening', r));
   BASE = `http://127.0.0.1:${runtime.server.address().port}`;
-  await Promise.all([User, RFQ, Bid, Order].map((m) => m.deleteMany({})));
+  await Promise.all([User, RFQ, Bid, Order, Message].map((m) => m.deleteMany({})));
 });
 
 test.after(async () => {
@@ -511,7 +511,64 @@ test('admin analytics reflect the run', async () => {
   assert.equal(a.quality.ratingsCount, 1);
 });
 
-// ── 18. Forgot / reset password ──────────────────────────────────────────────────────────
+// ── 18. Buyer-vendor chat with contact filtering ─────────────────────────────────────────
+test('chat: contact details are masked before delivery; admins see originals; outsiders are refused', async () => {
+  const orderId = S.order._id;
+  const sAdmin = await connect(S.admin);
+
+  const toBuyer = waitFor(S.sBuyer, 'chat:message', (p) => p.orderId === orderId);
+  const toAdmin = waitFor(sAdmin, 'chat:monitor', (p) => p.orderId === orderId);
+  const flaggedAlert = waitFor(sAdmin, 'chat:flagged', (p) => p.orderId === orderId);
+  const raw = 'Thanks! WhatsApp me on 077 123 4567 or email kasun.silva@gmail.com for faster replies';
+  const sent = await emitAck(S.sV2, 'chat:send', { orderId, body: raw });
+  assert.equal(sent.ok, true, JSON.stringify(sent));
+  assert.deepEqual([...sent.result.blocked].sort(), ['app', 'email', 'phone']);
+  assert.ok(!/4567|kasun|gmail|whatsapp/i.test(sent.result.message.body), sent.result.message.body);
+  assert.ok(sent.result.message.body.includes('[CONTACT BLOCKED]'));
+
+  const delivered = await toBuyer;
+  assert.equal(delivered.message.body, sent.result.message.body, 'the buyer receives the filtered text');
+  assert.equal(delivered.message.originalBody, undefined, 'the buyer never receives the original');
+  const monitored = await toAdmin;
+  assert.equal(monitored.message.originalBody, raw, 'admins receive the original for monitoring');
+  assert.equal((await flaggedAlert).orderCode, S.order.orderCode);
+
+  await ok('POST', `/orders/${orderId}/messages`, S.buyer, { body: 'Great, the shirts look perfect. Thank you!' });
+
+  const buyerView = await ok('GET', `/orders/${orderId}/messages`, S.buyer);
+  assert.equal(buyerView.messages.length, 2);
+  assert.equal(buyerView.unread, 1, "the vendor's message is unread for the buyer");
+  assert.ok(buyerView.messages.every((m) => m.originalBody === undefined && m.flags === undefined));
+  assert.equal(buyerView.canSend, true);
+
+  const seen = waitFor(S.sV2, 'chat:read', (p) => p.orderId === orderId);
+  await ok('POST', `/orders/${orderId}/messages/read`, S.buyer);
+  await seen;
+  assert.equal((await ok('GET', `/orders/${orderId}/messages`, S.buyer)).unread, 0);
+
+  const outsider = await api('GET', `/orders/${orderId}/messages`, S.v1.token);
+  assert.equal(outsider.status, 403, 'a vendor who lost the auction cannot read the chat');
+  const outsiderSend = await api('POST', `/orders/${orderId}/messages`, S.v1.token, { body: 'hello' });
+  assert.equal(outsiderSend.status, 403);
+
+  const adminView = await ok('GET', `/orders/${orderId}/messages`, S.admin);
+  assert.equal(adminView.canSend, false);
+  assert.equal(adminView.messages[0].originalBody, raw);
+  assert.deepEqual([...adminView.messages[0].flags].sort(), ['app', 'email', 'phone']);
+  const adminPost = await emitAck(sAdmin, 'chat:send', { orderId, body: 'hi' });
+  assert.equal(adminPost.ok, false, 'admins monitor but do not post');
+
+  const conversations = await ok('GET', '/admin/conversations?flagged=true', S.admin);
+  const row = conversations.items.find((c) => c.orderId === orderId);
+  assert.ok(row, 'the flagged conversation is listed for admins');
+  assert.equal(row.flaggedMessages, 1);
+  assert.equal(row.messages, 2);
+
+  const stored = await Message.findOne({ orderId, flagged: true }).select('+originalBody');
+  assert.equal(stored.originalBody, raw, 'the original is kept in MongoDB for audit');
+});
+
+// ── 19. Forgot / reset password ──────────────────────────────────────────────────────────
 test('password reset: generic answer, e-mailed single-use link, old sessions signed out', async () => {
   const generic = await ok('POST', '/auth/forgot-password', null, { email: 'nobody@e2e.test' });
   const real = await ok('POST', '/auth/forgot-password', null, { email: 'buyer@e2e.test' });

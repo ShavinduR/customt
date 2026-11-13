@@ -9,6 +9,7 @@ import EscrowBreakdown from '../../components/orders/EscrowBreakdown';
 import DisputeThread from '../../components/orders/DisputeThread';
 import SpecSummary from '../../components/auction/SpecSummary';
 import ReceiptButton from '../../components/orders/ReceiptButton';
+import OrderChat from '../../components/chat/OrderChat';
 import { Alert, Badge, Button, Card, CardHeader, ErrorList, Field, Modal, PageHeader, PageLoader, StatusBadge, Textarea, TrustStars, cx } from '../../components/ui';
 import { formatDate, formatLKR, titleCase } from '../../utils/format';
 import { statusMeta } from '../../utils/status';
@@ -214,6 +215,8 @@ export default function AdminOrderDetail() {
               {order.dispute.resolutionNotes && <p className="mt-1">Note: {order.dispute.resolutionNotes}</p>}
             </Alert>
           )}
+
+          <OrderChat orderId={order._id} viewerRole="admin" compact />
 
           {order.disputeNotes?.length > 0 && (
             <Card>

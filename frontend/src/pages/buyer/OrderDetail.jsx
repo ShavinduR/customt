@@ -30,6 +30,7 @@ import DisputeModal from '../../components/orders/DisputeModal';
 import DisputeThread from '../../components/orders/DisputeThread';
 import RatingModal from '../../components/orders/RatingModal';
 import ReceiptButton from '../../components/orders/ReceiptButton';
+import OrderChat from '../../components/chat/OrderChat';
 import SpecSummary from '../../components/auction/SpecSummary';
 import { Alert, Badge, Button, Card, CardHeader, ErrorList, Modal, PageHeader, PageLoader, StatusBadge, TrustStars } from '../../components/ui';
 import { formatDate, formatLKR, titleCase } from '../../utils/format';
@@ -224,6 +225,8 @@ export default function OrderDetail() {
             </Alert>
           )}
           {order.orderStatus === 'CANCELLED' && <Alert tone="info" title="This order was cancelled before payment." />}
+
+          <OrderChat orderId={order._id} viewerRole="buyer" counterpartName={vendorName} />
 
           {showThread && (
             <Card>

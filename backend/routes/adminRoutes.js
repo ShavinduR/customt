@@ -8,6 +8,7 @@ const { parsePagination, escapeRegex, assertObjectId, round, roundMoney } = requ
 const auctionService = require('../services/auctionService');
 const orderService = require('../services/orderService');
 const realtime = require('../services/realtime');
+const chatService = require('../services/chatService');
 
 const router = express.Router();
 router.use(protect, authorize(ROLES.ADMIN));
@@ -204,6 +205,18 @@ router.post(
 );
 
 // ───────────────────────────── Market Intelligence Analytics ─────────────────────────────
+
+/** GET /api/admin/conversations?flagged=true&search= - every buyer-vendor chat, newest first */
+router.get(
+  '/conversations',
+  asyncHandler(async (req, res) => {
+    const items = await chatService.listConversations({
+      flaggedOnly: req.query.flagged === 'true',
+      search: req.query.search || '',
+    });
+    res.json({ success: true, items });
+  })
+);
 
 /** GET /api/admin/analytics */
 router.get(

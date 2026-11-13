@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { BarChart3, ChevronDown, Gavel, History, Scale, ShieldCheck, Users, LayoutDashboard, LogOut, Menu, Package, PencilRuler, Radio, Shirt, UserCircle, Wallet, Wifi, WifiOff, X } from 'lucide-react';
+import { BarChart3, ChevronDown, MessagesSquare, Gavel, History, Scale, ShieldCheck, Users, LayoutDashboard, LogOut, Menu, Package, PencilRuler, Radio, Shirt, UserCircle, Wallet, Wifi, WifiOff, X } from 'lucide-react';
 import { useAuth, roleHome } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import NotificationBell from './NotificationBell';
@@ -26,6 +26,7 @@ const NAV = {
     { to: '/admin/vendors', label: 'Vendors', icon: ShieldCheck },
     { to: '/admin/auctions', label: 'Auctions', icon: Radio },
     { to: '/admin/disputes', label: 'Disputes', icon: Scale },
+    { to: '/admin/messages', label: 'Messages', icon: MessagesSquare },
     { to: '/admin/orders', label: 'Escrow', icon: Package },
     { to: '/admin/analytics', label: 'Analytics', icon: BarChart3 },
     { to: '/admin/users', label: 'Users', icon: Users },
@@ -64,11 +65,11 @@ function UserMenu() {
     <div className="relative" ref={ref}>
       <button type="button" onClick={() => setOpen((v) => !v)} className="flex items-center gap-2 rounded-lg p-1 pr-2 hover:bg-slate-100">
         <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-100 text-sm font-semibold text-brand-700">{initials(user.name)}</span>
-        <span className="hidden text-left md:block">
+        <span className="hidden text-left 2xl:block">
           <span className="block max-w-[10rem] truncate text-sm font-medium text-slate-900">{user.companyName || user.name}</span>
           <span className="block text-xs text-slate-500">{ROLE_LABEL[user.role]}</span>
         </span>
-        <ChevronDown className="hidden h-4 w-4 text-slate-400 md:block" />
+        <ChevronDown className="hidden h-4 w-4 text-slate-400 2xl:block" />
       </button>
       {open && (
         <div className="absolute right-0 z-40 mt-2 w-56 animate-slide-up overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
