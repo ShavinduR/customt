@@ -10,9 +10,7 @@ import {
   Factory,
   Flag,
   History,
-  Mail,
   MessagesSquare,
-  Phone,
   ScanSearch,
   ShieldCheck,
   Star,
@@ -261,16 +259,10 @@ export default function OrderDetail() {
                   </Badge>
                 ))}
               </div>
-              {vendor.phone && (
-                <a href={`tel:${vendor.phone}`} className="flex items-center gap-2 text-slate-700 hover:text-brand-700">
-                  <Phone className="h-4 w-4 text-slate-400" /> {vendor.phone}
-                </a>
-              )}
-              {vendor.email && (
-                <a href={`mailto:${vendor.email}`} className="flex items-center gap-2 break-all text-slate-700 hover:text-brand-700">
-                  <Mail className="h-4 w-4 text-slate-400" /> {vendor.email}
-                </a>
-              )}
+              <p className="flex items-start gap-2 rounded-lg bg-slate-50 p-2.5 text-xs text-slate-600">
+                <MessagesSquare className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
+                Contact details stay private. Use the order chat to arrange the hand-over, so your escrow protection stays valid.
+              </p>
               <p className="flex items-center gap-2 text-slate-700">
                 <Clock className="h-4 w-4 text-slate-400" /> Lead time {order.leadTimeDays} days
               </p>

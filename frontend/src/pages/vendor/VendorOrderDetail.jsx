@@ -10,9 +10,7 @@ import {
   Flag,
   History,
   KeyRound,
-  Mail,
   MessagesSquare,
-  Phone,
   QrCode,
   ScanSearch,
   ShieldCheck,
@@ -361,19 +359,13 @@ export default function VendorOrderDetail() {
 
         <div className="space-y-6">
           <Card>
-            <CardHeader icon={User} title="Buyer" subtitle="Contact for the O2O hand-over" />
+            <CardHeader icon={User} title="Buyer" subtitle="Arrange the O2O hand-over in the order chat" />
             <div className="space-y-3 p-5 text-sm">
               <p className="font-semibold text-slate-900">{buyer.name}</p>
-              {buyer.phone && (
-                <a href={`tel:${buyer.phone}`} className="flex items-center gap-2 text-slate-700 hover:text-brand-700">
-                  <Phone className="h-4 w-4 text-slate-400" /> {buyer.phone}
-                </a>
-              )}
-              {buyer.email && (
-                <a href={`mailto:${buyer.email}`} className="flex items-center gap-2 break-all text-slate-700 hover:text-brand-700">
-                  <Mail className="h-4 w-4 text-slate-400" /> {buyer.email}
-                </a>
-              )}
+              <p className="flex items-start gap-2 rounded-lg bg-slate-50 p-2.5 text-xs text-slate-600">
+                <MessagesSquare className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
+                Contact details stay private. Use the order chat to arrange the hand-over, so your escrow protection stays valid.
+              </p>
             </div>
           </Card>
 

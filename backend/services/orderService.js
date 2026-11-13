@@ -52,6 +52,13 @@ function orderView(order, user) {
   obj.o2oAttemptsRemaining = Math.max(0, ESCROW.O2O_MAX_ATTEMPTS - (order.o2oAttempts || 0));
   obj.canRate = role === ROLES.BUYER && order.orderStatus === ORDER_STATUS.COMPLETED && !order.buyerRating?.rating;
   if (role === ROLES.VENDOR && obj.dispute) delete obj.dispute.description; // vendor sees softened template only
+  // Keep deals on-platform: buyers and vendors never receive each other's phone number or e-mail.
+  // They arrange the hand-over in the monitored order chat; admins still see full contact details.
+  const counterpart = role === ROLES.BUYER ? obj.vendorId : role === ROLES.VENDOR ? obj.buyerId : null;
+  if (counterpart && typeof counterpart === 'object') {
+    delete counterpart.phone;
+    delete counterpart.email;
+  }
   return obj;
 }
 

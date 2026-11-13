@@ -564,6 +564,15 @@ test('chat: contact details are masked before delivery; admins see originals; ou
   assert.equal(row.flaggedMessages, 1);
   assert.equal(row.messages, 2);
 
+  const asBuyer = (await ok('GET', `/orders/${orderId}`, S.buyer)).order;
+  assert.equal(asBuyer.vendorId.phone, undefined, "buyers don't receive the vendor's phone");
+  assert.equal(asBuyer.vendorId.email, undefined);
+  const asVendor = (await ok('GET', `/orders/${orderId}`, S.v2.token)).order;
+  assert.equal(asVendor.buyerId.phone, undefined, "vendors don't receive the buyer's phone");
+  assert.equal(asVendor.buyerId.email, undefined);
+  const asAdmin = (await ok('GET', `/orders/${orderId}`, S.admin)).order;
+  assert.ok(asAdmin.buyerId.email && asAdmin.vendorId.email, 'admins still see contact details');
+
   const stored = await Message.findOne({ orderId, flagged: true }).select('+originalBody');
   assert.equal(stored.originalBody, raw, 'the original is kept in MongoDB for audit');
 });
