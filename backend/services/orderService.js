@@ -518,12 +518,12 @@ async function rateVendor(buyer, orderId, { rating, review }) {
 // Disputes (Politeness CRM)
 // ───────────────────────────────────────────────────────────────────────────
 
-function validateEvidence(urls) {
+function validateEvidence(urls, ownerId) {
   if (urls === undefined || urls === null) return [];
   if (!Array.isArray(urls) || urls.length > 5) throw ApiError.badRequest('Provide up to 5 evidence URLs');
   return urls.map((u) => {
     const s = String(u).trim();
-    if (!isUploadedFileUrl(s)) throw ApiError.badRequest('Evidence must be images uploaded to CustomT');
+    if (!isUploadedFileUrl(s, { ownerId })) throw ApiError.badRequest('Evidence must be images you uploaded to CustomT');
     return s;
   });
 }
@@ -539,7 +539,7 @@ async function raiseDispute(buyer, orderId, { category, description, desiredReso
   if (text.length < 20 || text.length > 2000) {
     throw ApiError.badRequest('Please describe the issue in 20 to 2000 characters so the mediator can help');
   }
-  const evidence = validateEvidence(evidenceUrls);
+  const evidence = validateEvidence(evidenceUrls, buyer._id);
 
   return withOrderLock(orderId, async () => {
     const order = await loadOrderForUser(orderId, buyer, { populate: true });

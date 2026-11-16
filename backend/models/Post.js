@@ -93,8 +93,11 @@ const postSchema = new mongoose.Schema(
           message: `Add ${POSTS.MIN_IMAGES} to ${POSTS.MAX_IMAGES} photos`,
         },
         {
-          validator: (list) => (list || []).every(isUploadedFileUrl),
-          message: 'Photos must be images uploaded to CustomT',
+          // Only the vendor's own uploads, and no SVG in the public feed.
+          validator(list) {
+            return (list || []).every((url) => isUploadedFileUrl(url, { ownerId: this.vendorId, rasterOnly: true }));
+          },
+          message: 'Photos must be PNG, JPG or WEBP images you uploaded to CustomT',
         },
       ],
     },

@@ -666,13 +666,14 @@ test('security: contact details are masked outside chat, self-dealing and imposs
 
 // ── 21. Phase 5: Global Feed, micro-storefronts and Direct RFQs ──────────────────────────
 test('phase 5: vendor posts are filtered and validated, the feed paginates, Direct RFQs stay exclusive and use escrow', async () => {
-  const IMG = '/uploads/logos/0123456789abcdef01234567-1731480000000-a1b2c3d4.jpg';
+  // Photos must be the posting vendor's own uploads (the uploader id is part of the filename).
+  const img = (vendorId) => `/uploads/logos/${vendorId}-1731480000000-a1b2c3d4.jpg`;
   const buyer = (await ok('POST', '/auth/register', null, { role: 'buyer', name: 'Feed Buyer', email: 'feed@e2e.test', password: 'Buyer1234', phone: '+94775550000' })).token;
   const premium = {
     postType: 'PREMIUM_CATALOG',
     title: 'Heavyweight crew neck',
     postDescription: 'Pre-shrunk 220 GSM. WhatsApp me on 077 123 4567 or email alpha@prints.lk for bulk deals',
-    images: [IMG],
+    images: [img(S.v1.id)],
     garmentType: 'Crew Neck',
     printTypes: ['Screen Printing'],
     sizeChart: [{ size: 'M', chestCm: 104, lengthCm: 72 }, { size: 'L', chestCm: 110, lengthCm: 74 }],
@@ -690,6 +691,8 @@ test('phase 5: vendor posts are filtered and validated, the feed paginates, Dire
   assert.equal(noChart.status, 400);
   assert.ok(noChart.body.details.some((d) => /size chart/.test(d)) && noChart.body.details.some((d) => /fabric specs/.test(d)), JSON.stringify(noChart.body));
 
+  const stolen = await api('POST', '/posts', S.v1.token, { ...premium, images: [img(S.v2.id)] });
+  assert.equal(stolen.status, 400, "a vendor can't publish another user's upload");
   const created = await ok('POST', '/posts', S.v1.token, premium);
   assert.ok(created.post.postDescription.includes('[CONTACT BLOCKED]'));
   assert.ok(!/4567|whatsapp|@/i.test(created.post.postDescription), created.post.postDescription);
@@ -698,9 +701,9 @@ test('phase 5: vendor posts are filtered and validated, the feed paginates, Dire
   assert.ok(!/4567|@/.test(stored.postDescription), 'the unfiltered text never reaches MongoDB');
 
   for (const title of ['Idea one', 'Idea two', 'Idea three']) {
-    await ok('POST', '/posts', S.v2.token, { postType: 'INSPIRATION', title, images: [IMG] });
+    await ok('POST', '/posts', S.v2.token, { postType: 'INSPIRATION', title, images: [img(S.v2.id)] });
   }
-  await ok('POST', '/posts', S.v4.token, { postType: 'CLEARANCE', title: 'Navy polos', images: [IMG], garmentType: 'Polo', clearance: { availableQuantity: 80, unitPrice: 600 } });
+  await ok('POST', '/posts', S.v4.token, { postType: 'CLEARANCE', title: 'Navy polos', images: [img(S.v4.id)], garmentType: 'Polo', clearance: { availableQuantity: 80, unitPrice: 600 } });
 
   // Global Feed: newest first, cursor pagination without duplicates, no vendor contact details.
   const seen = [];
@@ -733,7 +736,7 @@ test('phase 5: vendor posts are filtered and validated, the feed paginates, Dire
   assert.equal(store.canRequestDirectQuote, true);
   assert.equal((await api('GET', `/vendors/${pendingVendor.id}/storefront`, buyer)).status, 404, 'unverified vendors have no public storefront');
 
-  const bio = await ok('PATCH', '/vendor/storefront', S.v1.token, { bio: 'Family printers since 1998. Call 0771234567', coverUrl: IMG });
+  const bio = await ok('PATCH', '/vendor/storefront', S.v1.token, { bio: 'Family printers since 1998. Call 0771234567', coverUrl: img(S.v1.id) });
   assert.ok(bio.storefront.bio.includes('[CONTACT BLOCKED]'));
 
   // Direct RFQ: exclusive to Alpha, refused for a vendor without the capability.

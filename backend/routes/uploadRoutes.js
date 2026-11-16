@@ -1,5 +1,6 @@
 const fs = require('fs/promises');
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const ApiError = require('../utils/ApiError');
 const { protect, authorize } = require('../middleware/auth');
 const { logoUpload } = require('../middleware/upload');
@@ -38,8 +39,22 @@ async function hasImageSignature(filePath, mimeType) {
  * POST /api/uploads/logo  (multipart/form-data, field "logo")
  * Returns { path, url } - put `url` into designSpecs.logoUrl.
  */
+/**
+ * Per-user upload quota. Files are stored on the server's disk, so without a quota one account could
+ * fill it (the global API limit allows 600 requests a minute). 40 uploads an hour covers real use:
+ * a design with 8 images plus a few 6-photo posts.
+ */
+const uploadQuota = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 40,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  keyGenerator: (req) => String(req.user._id),
+  message: { success: false, code: 'UPLOAD_QUOTA', message: 'Upload limit reached (40 files per hour). Please try again later.' },
+});
+
 // Buyers upload artwork; vendors upload post photos and storefront covers.
-router.post('/logo', protect, authorize(ROLES.BUYER, ROLES.VENDOR, ROLES.ADMIN), (req, res, next) => {
+router.post('/logo', protect, authorize(ROLES.BUYER, ROLES.VENDOR, ROLES.ADMIN), uploadQuota, (req, res, next) => {
   logoUpload(req, res, async (err) => {
     if (err) return next(err);
     if (!req.file) return next(ApiError.badRequest('Attach an image in the "logo" field'));
