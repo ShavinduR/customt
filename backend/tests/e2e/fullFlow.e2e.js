@@ -33,6 +33,8 @@ Object.assign(process.env, {
   ALLOW_BID_PRICE_INCREASE: 'false',
   CLIENT_URL: 'http://localhost:5173',
   SMTP_HOST: '', // e-mails are captured in memory instead of sent
+  FACEBOOK_APP_ID: 'e2e-facebook-app', // Facebook's servers are replaced by a stub in test 23
+  FACEBOOK_APP_SECRET: 'e2e-facebook-secret',
 });
 
 const { io: ioClient } = require('socket.io-client');
@@ -930,4 +932,99 @@ test('KYB: buyer-only sign-up, private document upload, admin review with change
   const cooled = await api('PUT', '/kyb/application', rejectedUser.token, { business: { legalName: 'Shady Shirts 2' } });
   assert.equal(cooled.status, 409);
   assert.equal(cooled.body.code, 'KYB_COOLDOWN');
+});
+
+// ── 23. Facebook Login (Facebook's Graph API is stubbed) ─────────────────────────────────
+test('Facebook Login: CSRF-checked callback, sign-up with phone, one-time login codes, no silent account linking, link and unlink', async () => {
+  const facebookAuth = require('../../services/facebookAuth');
+  let profile;
+  facebookAuth._setGraphClient({
+    exchangeCode: async (code) => {
+      assert.equal(code, 'fb-code');
+      return 'fb-access-token';
+    },
+    fetchProfile: async () => profile,
+  });
+  const raw = (path, { cookie, token, method = 'GET' } = {}) =>
+    fetch(`${BASE}${path}`, { method, redirect: 'manual', headers: { ...(cookie ? { cookie } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}) } });
+  /** Runs start -> Facebook -> callback and returns the final redirect URL into the web app. */
+  const facebookRoundTrip = async (startPath = '/api/auth/facebook') => {
+    const start = await raw(startPath);
+    assert.equal(start.status, 302);
+    const dialog = new URL(start.headers.get('location'));
+    if (dialog.hostname !== 'www.facebook.com') return dialog; // e.g. an expired link ticket
+    assert.equal(dialog.searchParams.get('client_id'), 'e2e-facebook-app');
+    assert.equal(dialog.searchParams.get('scope'), 'public_profile,email');
+    const state = dialog.searchParams.get('state');
+    const cookie = start.headers.get('set-cookie').split(';')[0];
+    assert.match(start.headers.get('set-cookie'), /HttpOnly/);
+    const back = await raw(`/api/auth/facebook/callback?code=fb-code&state=${encodeURIComponent(state)}`, { cookie });
+    assert.equal(back.status, 302);
+    return new URL(back.headers.get('location'));
+  };
+
+  try {
+    // CSRF: a callback whose state doesn't match this browser's cookie is refused.
+    const start = await raw('/api/auth/facebook');
+    const state = new URL(start.headers.get('location')).searchParams.get('state');
+    const forged = await raw(`/api/auth/facebook/callback?code=fb-code&state=${state}`, { cookie: 'customt_fb_state=someone-else' });
+    assert.equal(new URL(forged.headers.get('location')).searchParams.get('oauthError'), 'state_mismatch');
+
+    // New Facebook user: must add a phone number; becomes a BUYER with no password.
+    profile = { id: 'fb-1001', name: 'Dilini Fernando', email: 'dilini@fb.test' };
+    const toComplete = await facebookRoundTrip();
+    assert.equal(toComplete.pathname, '/auth/facebook/complete');
+    const ticket = toComplete.searchParams.get('ticket');
+    assert.deepEqual(await ok('GET', `/auth/facebook/signup?ticket=${encodeURIComponent(ticket)}`), { success: true, name: 'Dilini Fernando', email: 'dilini@fb.test' });
+    const badPhone = await api('POST', '/auth/facebook/complete', null, { ticket, phone: 'abc' });
+    assert.equal(badPhone.status, 400, 'a typo does not use up the ticket');
+    const created = await ok('POST', '/auth/facebook/complete', null, { ticket, phone: '+94775556666' }, [201]);
+    assert.equal(created.user.role, 'buyer');
+    assert.equal((await api('POST', '/auth/facebook/complete', null, { ticket, phone: '+94775556666' })).status, 400, 'sign-up tickets work once');
+    const me = (await ok('GET', '/auth/me', created.token)).user;
+    assert.equal(me.facebookLinked, true);
+    assert.equal(me.hasPassword, false);
+    assert.equal(me.oauth, undefined, 'the Facebook id itself is not sent to the browser');
+    assert.equal((await api('POST', '/auth/login', null, { email: 'dilini@fb.test', password: 'anything1' })).status, 401, 'no password login for Facebook-only accounts');
+    assert.equal((await api('PATCH', '/auth/me/password', created.token, { currentPassword: '', newPassword: 'NewPass123' })).body.code, 'NO_PASSWORD');
+
+    // Returning user: one-time, short-lived login code exchanged for a session (never a token in the URL).
+    const toCallback = await facebookRoundTrip();
+    assert.equal(toCallback.pathname, '/auth/callback');
+    assert.ok(!toCallback.search.includes('eyJ'), 'no JWT in the redirect URL');
+    const code = toCallback.searchParams.get('code');
+    const session = await ok('POST', '/auth/exchange', null, { code });
+    assert.equal(session.user.email, 'dilini@fb.test');
+    assert.equal((await api('POST', '/auth/exchange', null, { code })).status, 401, 'login codes work once');
+
+    // Same e-mail as an existing password account: never linked automatically.
+    profile = { id: 'fb-2002', name: 'Imposter', email: 'feed@e2e.test' };
+    const clash = await facebookRoundTrip();
+    assert.equal(clash.searchParams.get('oauthError'), 'email_exists');
+    assert.equal((await User.findOne({ email: 'feed@e2e.test' }).lean()).oauth?.facebook?.id, undefined);
+
+    // No e-mail from Facebook: asked to register with e-mail instead.
+    profile = { id: 'fb-3003', name: 'No Mail', email: null };
+    assert.equal((await facebookRoundTrip()).searchParams.get('oauthError'), 'no_email');
+
+    // Linking from the Account page (signed in with a password), then unlinking.
+    const owner = await ok('POST', '/auth/login', null, { email: 'kyb2@e2e.test', password: 'Buyer1234' });
+    const { ticket: linkTicket } = await ok('POST', '/auth/facebook/link', owner.token);
+    profile = { id: 'fb-4004', name: 'Other Buyer', email: 'other-fb@fb.test' };
+    const linked = await facebookRoundTrip(`/api/auth/facebook?link=${encodeURIComponent(linkTicket)}`);
+    assert.equal(linked.pathname, '/account');
+    assert.equal(linked.searchParams.get('facebook'), 'linked');
+    assert.equal((await ok('GET', '/auth/me', owner.token)).user.facebookLinked, true);
+    const reused = await facebookRoundTrip(`/api/auth/facebook?link=${encodeURIComponent(linkTicket)}`);
+    assert.equal(reused.searchParams.get('facebook'), 'link_expired', 'link tickets work once');
+    profile = { id: 'fb-1001', name: 'Dilini Fernando', email: 'dilini@fb.test' };
+    const { ticket: stealTicket } = await ok('POST', '/auth/facebook/link', (await ok('POST', '/auth/login', null, { email: 'kyb3@e2e.test', password: 'Buyer1234' })).token);
+    assert.equal((await facebookRoundTrip(`/api/auth/facebook?link=${encodeURIComponent(stealTicket)}`)).searchParams.get('oauthError'), 'facebook_in_use');
+
+    assert.equal((await api('DELETE', '/auth/facebook', created.token)).body.code, 'PASSWORD_REQUIRED', 'cannot unlink the only way to sign in');
+    await ok('DELETE', '/auth/facebook', owner.token);
+    assert.equal((await ok('GET', '/auth/me', owner.token)).user.facebookLinked, false);
+  } finally {
+    facebookAuth._setGraphClient(null);
+  }
 });

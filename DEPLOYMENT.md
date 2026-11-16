@@ -99,6 +99,31 @@ Buyers apply to become vendors by uploading a BR copy, NIC, utility bill and inv
 
 R2 encrypts every object at rest. Documents of rejected or withdrawn applications are deleted automatically after 180 days. Every time an admin opens a document, it is recorded in the `kybaccesslogs` collection.
 
+### Facebook Login (optional)
+
+The "Continue with Facebook" button appears only when Facebook is configured on the API. Everything runs server-side: the app secret stays on Render, and no Facebook script is loaded in the website.
+
+1. Go to [developers.facebook.com](https://developers.facebook.com/) → **My Apps → Create App**. Choose the use case **Authenticate and request data from users with Facebook Login**, and a **Consumer** app type if asked.
+2. **Facebook Login → Settings**:
+   - **Valid OAuth Redirect URIs:** `https://customt-api.onrender.com/api/auth/facebook/callback` (your Render URL plus `/api/auth/facebook/callback`, exactly).
+   - Keep **Client OAuth login** and **Web OAuth login** on, and **Enforce HTTPS** on.
+3. **App settings → Basic**:
+   - **Privacy Policy URL:** `https://customt.vercel.app/privacy`
+   - **User data deletion → Data deletion instructions URL:** `https://customt.vercel.app/privacy#data-deletion`
+   - **App domains:** `customt.vercel.app`
+
+   Copy the **App ID** and **App Secret**.
+4. **Use cases → Facebook Login → Permissions:** only `public_profile` and `email` are needed. Both are standard and don't need App Review.
+5. In Render → *Environment* set `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET` and `PUBLIC_API_URL=https://customt-api.onrender.com`. Optionally set `FACEBOOK_GRAPH_VERSION` to the version shown in your app dashboard.
+6. While the app is in **Development** mode, only people with a role on the app (you, plus testers you add) can sign in. Switch the app to **Live** when you're ready for everyone.
+
+How accounts are matched:
+- A new Facebook user becomes a buyer after adding a phone number.
+- A Facebook login whose e-mail already belongs to a CustomT account is **not** linked automatically. The person signs in with their password and links Facebook from *Account → Sign-in methods*.
+- Facebook users without a password can set one with "Forgot password".
+
+Optional: set `VITE_SUPPORT_EMAIL` on Vercel to show an address for account-deletion requests on the privacy page.
+
 ## 4. Frontend on Vercel (or Netlify)
 
 **Vercel:** *Add New → Project* → import the repo. Set **Root Directory** to `frontend` (the framework is detected as Vite). Add this environment variable:

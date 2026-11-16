@@ -128,7 +128,12 @@ export default function Landing() {
         </div>
       </section>
 
-      <footer className="py-8 text-center text-sm text-slate-500">CustomT · Centralized E-commerce Marketplace & Reverse Auction Platform for Custom Apparel Procurement</footer>
+      <footer className="py-8 text-center text-sm text-slate-500">
+        CustomT · Centralized E-commerce Marketplace & Reverse Auction Platform for Custom Apparel Procurement ·{' '}
+        <a href="/privacy" className="hover:underline">
+          Privacy
+        </a>
+      </footer>
     </div>
   );
 }

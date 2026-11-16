@@ -51,6 +51,11 @@ export default function AuthShell({ title, subtitle, children, wide = false }) {
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">{title}</h1>
           {subtitle && <p className="mt-1 text-slate-500">{subtitle}</p>}
           <div className="mt-8">{children}</div>
+          <p className="mt-8 text-center text-xs text-slate-400">
+            <a href="/privacy" className="hover:text-slate-600 hover:underline">
+              Privacy and data deletion
+            </a>
+          </p>
         </div>
       </main>
     </div>

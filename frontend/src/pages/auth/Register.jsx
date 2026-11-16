@@ -4,6 +4,7 @@ import { Lock, Mail, Phone, ShieldCheck, Store, User, UserPlus } from 'lucide-re
 import { roleHome, useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import AuthShell from './AuthShell';
+import FacebookButton from '../../components/auth/FacebookButton';
 import { Alert, Button, ErrorList, Field, Input } from '../../components/ui';
 
 const PASSWORD_RULE = /^(?=.*[A-Za-z])(?=.*\d).{8,64}$/;
@@ -58,6 +59,7 @@ export default function Register() {
 
   return (
     <AuthShell title="Create your CustomT account" subtitle="Design custom apparel, get competing quotes and pay safely through escrow." wide>
+      <FacebookButton label="Sign up with Facebook" />
       <form onSubmit={submit} className="space-y-4" noValidate>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Full name" required error={show('name')} className="sm:col-span-2">

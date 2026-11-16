@@ -60,4 +60,11 @@ services:
         sync: false
       - key: KYB_HASH_KEY
         generateValue: true  # secret key for NIC fingerprints; never change it once set
+      # Facebook Login (optional; see DEPLOYMENT.md, "Facebook Login").
+      - key: FACEBOOK_APP_ID
+        sync: false
+      - key: FACEBOOK_APP_SECRET
+        sync: false
+      - key: FACEBOOK_GRAPH_VERSION
+        value: v23.0
 

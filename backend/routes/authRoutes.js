@@ -8,6 +8,7 @@ const { signToken, protect } = require('../middleware/auth');
 const { ROLES, PRINT_TYPES } = require('../config/constants');
 const realtime = require('../services/realtime');
 const { requestPasswordReset, userFromResetToken } = require('../services/passwordReset');
+const facebookAuth = require('../services/facebookAuth');
 const { containsContactInfo } = require('../utils/contactFilter');
 
 const router = express.Router();
@@ -136,6 +137,8 @@ router.get(
   protect,
   asyncHandler(async (req, res) => {
     const user = req.user.toJSON();
+    user.hasPassword = Boolean(await User.exists({ _id: req.user._id, passwordHash: { $type: 'string' } }));
+    user.facebookAvailable = facebookAuth.isEnabled();
     if (req.user.role === ROLES.VENDOR) {
       user.qualificationIssues = req.user.qualificationIssues();
     }
@@ -208,6 +211,11 @@ router.patch(
   asyncHandler(async (req, res) => {
     const { currentPassword, newPassword } = req.body;
     const user = await User.findById(req.user._id).select('+passwordHash');
+    if (!user.passwordHash) {
+      throw ApiError.badRequest('Your account signs in with Facebook and has no password yet. Use "Forgot password" on the sign-in page to set one.', {
+        code: 'NO_PASSWORD',
+      });
+    }
     if (!(await user.comparePassword(String(currentPassword || '')))) {
       throw ApiError.badRequest('Current password is incorrect');
     }
@@ -255,6 +263,87 @@ router.post(
     await user.save({ validateModifiedOnly: true });
     disconnectUserSockets(user._id);
     res.json({ success: true, message: 'Your password has been reset. You can now log in with the new password.' });
+  })
+);
+
+// ───────────────────────────── Facebook Login ─────────────────────────────
+
+// Its own budget, so a Facebook round trip (start + callback + exchange) doesn't eat into password logins.
+const facebookLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 60,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many sign-in attempts. Please try again in a few minutes.' },
+});
+
+/** GET /api/auth/facebook[?link=<ticket>] - full-page navigation: redirects to Facebook's login dialog. */
+router.get(
+  '/facebook',
+  facebookLimiter,
+  asyncHandler(async (req, res) => {
+    const { redirect, cookie } = await facebookAuth.startLogin(req, { linkTicket: typeof req.query.link === 'string' ? req.query.link : undefined });
+    if (cookie) res.append('Set-Cookie', cookie);
+    res.set('Cache-Control', 'no-store').redirect(302, redirect);
+  })
+);
+
+/** GET /api/auth/facebook/callback?code&state - Facebook redirects here; we redirect back to the web app. */
+router.get(
+  '/facebook/callback',
+  facebookLimiter,
+  asyncHandler(async (req, res) => {
+    const { redirect, clearCookie } = await facebookAuth.handleCallback(req);
+    if (clearCookie) res.append('Set-Cookie', facebookAuth.stateCookie('', 0));
+    res.set({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' }).redirect(302, redirect);
+  })
+);
+
+/** POST /api/auth/exchange { code } - one-time login code (60 s) -> normal session token. */
+router.post(
+  '/exchange',
+  facebookLimiter,
+  asyncHandler(async (req, res) => {
+    const user = await facebookAuth.exchangeLoginCode(req.body.code);
+    res.json(authResponse(user));
+  })
+);
+
+/** GET /api/auth/facebook/signup?ticket= - name and e-mail from Facebook, to show on the "add your phone" step. */
+router.get(
+  '/facebook/signup',
+  facebookLimiter,
+  asyncHandler(async (req, res) => {
+    res.set('Cache-Control', 'no-store').json({ success: true, ...(await facebookAuth.signupPreview(req.query.ticket)) });
+  })
+);
+
+/** POST /api/auth/facebook/complete { ticket, name?, phone } - creates the buyer account and signs in. */
+router.post(
+  '/facebook/complete',
+  facebookLimiter,
+  asyncHandler(async (req, res) => {
+    const user = await facebookAuth.completeSignup(req.body, { assertCleanDisplayName });
+    res.status(201).json({ ...authResponse(user), message: 'Welcome to CustomT!' });
+  })
+);
+
+/** POST /api/auth/facebook/link - signed-in user starts linking Facebook (returns a 5-minute ticket). */
+router.post(
+  '/facebook/link',
+  protect,
+  asyncHandler(async (req, res) => {
+    res.json({ success: true, ...(await facebookAuth.createLinkTicket(req.user)) });
+  })
+);
+
+/** DELETE /api/auth/facebook - unlink (only when the account has a password). */
+router.delete(
+  '/facebook',
+  protect,
+  asyncHandler(async (req, res) => {
+    const user = await facebookAuth.unlink(req.user._id);
+    res.json({ success: true, message: 'Facebook has been unlinked from your account.', user: user.toJSON() });
   })
 );
 

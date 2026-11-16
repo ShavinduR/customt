@@ -22,7 +22,25 @@ const userSchema = new mongoose.Schema(
       trim: true,
       match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Please provide a valid email address'],
     },
-    passwordHash: { type: String, required: true, select: false },
+    // Optional only for accounts created with Facebook Login (they can add a password later via reset).
+    passwordHash: {
+      type: String,
+      select: false,
+      required: [
+        function needsPassword() {
+          return !this.oauth?.facebook?.id;
+        },
+        'Password is required',
+      ],
+    },
+
+    // Linked social logins. Only the app-scoped Facebook user id is kept: never a Facebook access token.
+    oauth: {
+      facebook: {
+        id: { type: String, trim: true },
+        linkedAt: { type: Date },
+      },
+    },
     phone: {
       type: String,
       trim: true,
@@ -105,6 +123,8 @@ const userSchema = new mongoose.Schema(
       virtuals: true,
       transform(_doc, ret) {
         delete ret.passwordHash;
+        ret.facebookLinked = Boolean(ret.oauth?.facebook?.id);
+        delete ret.oauth;
         delete ret.__v;
         return ret;
       },
@@ -114,6 +134,7 @@ const userSchema = new mongoose.Schema(
 );
 
 userSchema.index({ role: 1, isVerified: 1, capabilities: 1, maxCapacity: 1 });
+userSchema.index({ 'oauth.facebook.id': 1 }, { unique: true, partialFilterExpression: { 'oauth.facebook.id': { $type: 'string' } } });
 
 /** Qualification-level lock: verified AND license not expired. */
 userSchema.virtual('isPrequalified').get(function isPrequalified() {
@@ -138,6 +159,8 @@ userSchema.methods.tokenIssuedBeforePasswordChange = function tokenIssuedBeforeP
 };
 
 userSchema.methods.comparePassword = function comparePassword(plain) {
+  // Facebook-only accounts have no password: never match (and never throw on a missing hash).
+  if (!this.passwordHash) return Promise.resolve(false);
   return bcrypt.compare(plain, this.passwordHash);
 };
 

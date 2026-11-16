@@ -57,6 +57,13 @@ const config = {
   // Base URL of the web app, used in e-mailed links. Defaults to the first CLIENT_URL.
   appUrl: (process.env.APP_URL || (process.env.CLIENT_URL || 'http://localhost:5173').split(',')[0]).trim().replace(/\/+$/, ''),
   passwordResetMinutes: toInt(process.env.PASSWORD_RESET_MINUTES, 15),
+
+  // Facebook Login (server-side OAuth 2.0). Disabled unless both values are set.
+  facebook: {
+    appId: (process.env.FACEBOOK_APP_ID || '').trim(),
+    appSecret: (process.env.FACEBOOK_APP_SECRET || '').trim(),
+    graphVersion: (process.env.FACEBOOK_GRAPH_VERSION || 'v23.0').trim(),
+  },
 };
 
 module.exports = { config, assertRequiredEnv };

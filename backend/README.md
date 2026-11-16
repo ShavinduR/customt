@@ -154,6 +154,21 @@ Every response is `{ success, ... }`. Errors look like `{ success:false, message
 
 **Direct RFQ.** `POST /api/rfqs` with `directVendorId` creates an auction only that vendor can see and bid on (`isDirect: true`). The vendor must pass every PERA lock for the design (otherwise **422 PERA_DIRECT_VENDOR_LOCK**), and other vendors get **403 DIRECT_RFQ_OTHER_VENDOR**. Accepting the bid creates a normal order, so payment still goes through escrow, the 30%/70% milestones and O2O verification.
 
+### Facebook Login: `/api/auth`
+Server-side OAuth 2.0. Enabled when `FACEBOOK_APP_ID` and `FACEBOOK_APP_SECRET` are set (`GET /api/meta/catalog` → `auth.facebook`).
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/facebook[?link=<ticket>]` | browser navigation: sets an HttpOnly `state` cookie and redirects to Facebook |
+| GET | `/facebook/callback` | Facebook returns here. The state is checked against the cookie (CSRF); the code is exchanged with the app secret; the profile is read with `appsecret_proof`; the access token is never stored. Redirects to the web app: `/auth/callback?code=` (existing user), `/auth/facebook/complete?ticket=` (new user), `/account?facebook=linked`, or `/login?oauthError=…` |
+| POST | `/exchange` | `{code}`: one-time 60-second login code → `{token, user}` |
+| GET | `/facebook/signup?ticket=` | name and e-mail received from Facebook (the ticket is not used up) |
+| POST | `/facebook/complete` | `{ticket, name?, phone}` → creates a **buyer** without a password → `{token, user}` |
+| POST | `/facebook/link` | (signed in) → `{ticket}` (5 min) for `GET /facebook?link=` |
+| DELETE | `/facebook` | (signed in) unlink; refused with `PASSWORD_REQUIRED` if the account has no password |
+
+An e-mail that already belongs to a CustomT account is never linked automatically (`oauthError=email_exists`). Tickets are stored only as SHA-256 hashes in `authtickets`, are single-use, and expire automatically.
+
 ### Vendor onboarding (KYB): `/api/kyb` and `/api/admin/vendor-applications`
 Applicant routes have **no ids**: they always act on the caller's own application.
 
