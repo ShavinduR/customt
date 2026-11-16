@@ -9,6 +9,7 @@
     "dev": "nodemon server.js",
     "seed": "node scripts/seed.js",
     "seed:admin": "node scripts/seed.js --admin-only",
+    "migrate:kyb": "node scripts/migrate-kyb.js",
     "test": "node --test",
     "test:e2e": "node --test --test-force-exit --test-timeout=120000 tests/e2e/fullFlow.e2e.js"
   },
@@ -24,6 +25,8 @@
   ],
   "license": "MIT",
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1161.0",
+    "@aws-sdk/s3-request-presigner": "3.1161.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
@@ -36,6 +39,7 @@
     "multer": "^2.0.2",
     "nodemailer": "10.3.1",
     "qrcode": "^1.5.4",
+    "sharp": "0.35.5",
     "socket.io": "^4.8.1"
   },
   "devDependencies": {

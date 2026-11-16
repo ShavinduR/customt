@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Award, BadgeCheck, Building2, CalendarDays, Factory, Search, ShieldCheck, ShieldOff } from 'lucide-react';
 import { adminApi } from '../../api/client';
 import { useCatalog } from '../../context/CatalogContext';
@@ -189,6 +189,13 @@ export default function VendorVerification() {
   return (
     <div>
       <PageHeader title="Vendor prequalification" subtitle="PERA qualification-level lock: only verified SMEs with a valid license can enter auction rooms." />
+      <Alert tone="info" className="mb-4">
+        New vendors now apply through KYB with their BR copy, NIC, utility bill and invoices. Review them under{' '}
+        <Link to="/admin/kyb" className="font-semibold underline">
+          KYB applications
+        </Link>
+        . This page manages existing vendor accounts (licence renewals, badges and suspensions).
+      </Alert>
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <Tabs tabs={TABS} value={status} onChange={(v) => setParams({ status: v })} />
         <div className="lg:w-80">

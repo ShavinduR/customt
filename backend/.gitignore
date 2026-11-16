@@ -5,3 +5,4 @@ uploads/logos/*
 npm-debug.log*
 .DS_Store
 coverage/
+private-kyb/

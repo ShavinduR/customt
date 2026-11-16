@@ -49,4 +49,15 @@ services:
         sync: false          # e.g. CustomT <no-reply@yourdomain.com> (a sender verified with the provider)
       - key: PASSWORD_RESET_MINUTES
         value: 15
+      # KYB documents: private Cloudflare R2 bucket (see DEPLOYMENT.md, "Vendor documents").
+      - key: KYB_S3_ENDPOINT
+        sync: false          # https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+      - key: KYB_S3_BUCKET
+        sync: false          # e.g. customt-kyb
+      - key: KYB_S3_ACCESS_KEY_ID
+        sync: false
+      - key: KYB_S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: KYB_HASH_KEY
+        generateValue: true  # secret key for NIC fingerprints; never change it once set
 

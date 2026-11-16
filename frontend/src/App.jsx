@@ -37,6 +37,8 @@ import Analytics from './pages/admin/Analytics';
 import UsersAdmin from './pages/admin/UsersAdmin';
 import Conversations from './pages/admin/Conversations';
 import GlobalFeed from './pages/feed/GlobalFeed';
+import SellOnCustomT from './pages/buyer/SellOnCustomT';
+import KybApplications from './pages/admin/KybApplications';
 import VendorStorefront from './pages/feed/VendorStorefront';
 
 function HomeRoute() {
@@ -76,6 +78,7 @@ export default function App() {
                       <Route path="/buyer/rfqs/:id" element={<RFQDetail />} />
                       <Route path="/buyer/orders" element={<OrdersList />} />
                       <Route path="/buyer/orders/:id" element={<OrderDetail />} />
+                      <Route path="/buyer/sell" element={<SellOnCustomT />} />
                     </Route>
 
                     <Route element={<ProtectedRoute roles={['vendor']} />}>
@@ -95,6 +98,8 @@ export default function App() {
                     <Route element={<ProtectedRoute roles={['admin']} />}>
                       <Route path="/admin" element={<AdminOverview />} />
                       <Route path="/admin/vendors" element={<VendorVerification />} />
+                      <Route path="/admin/kyb" element={<KybApplications />} />
+                      <Route path="/admin/kyb/:id" element={<KybApplications />} />
                       <Route path="/admin/auctions" element={<LiveAuctions />} />
                       <Route path="/admin/disputes" element={<Disputes />} />
                       <Route path="/admin/orders" element={<AdminOrders />} />

@@ -76,6 +76,29 @@ Set `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` first (and `SEED_DEMO_PASSWORD` f
 
 SendGrid and Mailgun also offer port 2525. On a paid Render plan, any SMTP provider (including Gmail with an app password) works on port 587.
 
+### Vendor documents (KYB) on Cloudflare R2 (required for vendor onboarding)
+
+Buyers apply to become vendors by uploading a BR copy, NIC, utility bill and invoices. These are stored in a **private** Cloudflare R2 bucket. Until it is set up, the vendor application page shows "Document storage is not configured yet" in production.
+
+1. In the Cloudflare dashboard open **R2 Object Storage → Create bucket**. Name it `customt-kyb` and choose a location near your users (for example *Asia-Pacific*).
+2. Keep the bucket private:
+   - leave **Public access** off (no `r2.dev` URL, no custom domain);
+   - add **no CORS policy**: browsers never talk to the bucket directly.
+3. **R2 → Manage API tokens → Create API token**:
+   - permission **Object Read & Write**;
+   - **Apply to specific buckets only → `customt-kyb`**.
+
+   Copy the *Access Key ID* and *Secret Access Key*. They are shown only once.
+4. In Render → *Environment* set:
+   - `KYB_S3_ENDPOINT=https://<ACCOUNT_ID>.r2.cloudflarestorage.com` (the account ID is shown on the R2 overview page);
+   - `KYB_S3_BUCKET=customt-kyb`;
+   - `KYB_S3_ACCESS_KEY_ID=<access key id>`;
+   - `KYB_S3_SECRET_ACCESS_KEY=<secret access key>`;
+   - `KYB_HASH_KEY=<32+ random characters>` (the blueprint generates one). **Never change it afterwards**: it fingerprints NIC numbers to detect duplicates.
+5. After the deploy, run once from the Render *Shell*: `npm run migrate:kyb -- --apply`. This keeps existing vendor accounts approved (grandfathered); run it without `--apply` first to preview.
+
+R2 encrypts every object at rest. Documents of rejected or withdrawn applications are deleted automatically after 180 days. Every time an admin opens a document, it is recorded in the `kybaccesslogs` collection.
+
 ## 4. Frontend on Vercel (or Netlify)
 
 **Vercel:** *Add New → Project* → import the repo. Set **Root Directory** to `frontend` (the framework is detected as Vite). Add this environment variable:

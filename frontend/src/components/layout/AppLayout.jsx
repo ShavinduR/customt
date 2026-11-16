@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { BarChart3, ChevronDown, Compass, Store, MessagesSquare, Gavel, History, Scale, ShieldCheck, Users, LayoutDashboard, LogOut, Menu, Package, PencilRuler, Radio, Shirt, UserCircle, Wallet, Wifi, WifiOff, X } from 'lucide-react';
+import { BarChart3, ChevronDown, Compass, FileCheck2, Store, MessagesSquare, Gavel, History, Scale, ShieldCheck, Users, LayoutDashboard, LogOut, Menu, Package, PencilRuler, Radio, Shirt, UserCircle, Wallet, Wifi, WifiOff, X } from 'lucide-react';
 import { useAuth, roleHome } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import NotificationBell from './NotificationBell';
@@ -14,6 +14,7 @@ const NAV = {
     { to: '/buyer/rfqs/new', label: 'Design & Launch', icon: PencilRuler },
     { to: '/buyer/rfqs', label: 'My Auctions', icon: Gavel, end: true },
     { to: '/buyer/orders', label: 'Orders', icon: Package },
+    { to: '/buyer/sell', label: 'Sell', icon: Store },
   ],
   vendor: [
     { to: '/vendor', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -25,6 +26,7 @@ const NAV = {
   ],
   admin: [
     { to: '/admin', label: 'Overview', icon: LayoutDashboard, end: true },
+    { to: '/admin/kyb', label: 'KYB', icon: FileCheck2 },
     { to: '/admin/vendors', label: 'Vendors', icon: ShieldCheck },
     { to: '/admin/auctions', label: 'Auctions', icon: Radio },
     { to: '/admin/disputes', label: 'Disputes', icon: Scale },
@@ -111,6 +113,7 @@ export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
   const links = (NAV[user.role] || []).map((link) => ({ ...link, to: typeof link.to === 'function' ? link.to(user) : link.to }));
+  const compactNav = links.length > 7;
 
   useEffect(() => setMobileOpen(false), [location.pathname]);
 
@@ -131,9 +134,10 @@ export default function AppLayout() {
             <Logo to={roleHome(user.role)} />
             <nav className="hidden items-center gap-1 xl:flex">
               {links.map(({ to, label, icon: Icon, end }) => (
-                <NavLink key={to} to={to} end={end} className={linkClass}>
+                // Long menus (admin) show icons only until the screen is wide enough; the label stays as tooltip and accessible name.
+                <NavLink key={to} to={to} end={end} className={linkClass} title={compactNav ? label : undefined} aria-label={compactNav ? label : undefined}>
                   <Icon className="h-4 w-4" />
-                  {label}
+                  <span className={compactNav ? 'hidden min-[1760px]:inline' : undefined}>{label}</span>
                 </NavLink>
               ))}
             </nav>

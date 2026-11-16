@@ -126,6 +126,36 @@ export const vendorApi = {
   updateStorefront: (payload) => unwrap(http.patch('/vendor/storefront', payload)),
 };
 
+/** KYB vendor onboarding (applicant side). There are no ids: it always works on your own application. */
+export const kybApi = {
+  get: () => unwrap(http.get('/kyb/application')),
+  save: (payload) => unwrap(http.put('/kyb/application', payload)),
+  upload: ({ type, file, issuedOn }, onProgress) => {
+    const form = new FormData();
+    form.append('type', type);
+    if (issuedOn) form.append('issuedOn', issuedOn);
+    form.append('file', file);
+    return unwrap(
+      http.post('/kyb/application/documents', form, {
+        onUploadProgress: (e) => onProgress && e.total && onProgress(Math.round((e.loaded / e.total) * 100)),
+      })
+    );
+  },
+  removeDocument: (docId) => unwrap(http.delete(`/kyb/application/documents/${docId}`)),
+  submit: () => unwrap(http.post('/kyb/application/submit', { consent: true })),
+  withdraw: () => unwrap(http.post('/kyb/application/withdraw')),
+};
+
+/** KYB review (admins). Documents are fetched with the auth header as a Blob, never as a public URL. */
+export const adminKybApi = {
+  list: (params) => unwrap(http.get('/admin/vendor-applications', { params })),
+  get: (id) => unwrap(http.get(`/admin/vendor-applications/${id}`)),
+  documentBlob: (id, docId) => http.get(`/admin/vendor-applications/${id}/documents/${docId}`, { responseType: 'blob' }).then((res) => res.data),
+  documentLink: (id, docId) => unwrap(http.get(`/admin/vendor-applications/${id}/documents/${docId}/link`)),
+  reviewDocument: (id, docId, payload) => unwrap(http.post(`/admin/vendor-applications/${id}/documents/${docId}/review`, payload)),
+  decide: (id, payload) => unwrap(http.post(`/admin/vendor-applications/${id}/decision`, payload)),
+};
+
 /** Phase 5: Global Feed and vendor posts. `cursor` comes from the previous page's `nextCursor`. */
 export const postApi = {
   feed: ({ type, cursor, limit } = {}) => unwrap(http.get('/posts', { params: { type: type || undefined, cursor: cursor || undefined, limit } })),

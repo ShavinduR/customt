@@ -131,20 +131,31 @@ function expectedScores(bids) {
   return bids.map((b) => (minPrice / b.price) * 0.5 + (b.trust / maxTrust) * 0.3 + (minLead / b.leadTimeDays) * 0.2);
 }
 
+/**
+ * Vendors can no longer self-register (KYB onboarding). The auction tests need ready vendor accounts, so
+ * this registers a buyer through the API and converts it in the database exactly like a pre-KYB vendor
+ * account kept by the migration (unverified until an admin verifies it in test 3).
+ * The KYB flow itself is tested end to end in test 22.
+ */
 async function registerVendor(name, email, capabilities, maxCapacity) {
-  const res = await ok('POST', '/auth/register', null, {
-    role: 'vendor',
-    name,
-    email,
-    password: 'Vendor1234',
-    phone: '+94770000000',
-    companyName: `${name} Prints`,
-    businessRegNo: `PV-${Math.floor(Math.random() * 1e6)}`,
-    capabilities,
-    maxCapacity,
-    licenseExpiryDate: inYears(1),
-  });
-  return { token: res.token, id: res.user._id || res.user.id };
+  const res = await ok('POST', '/auth/register', null, { name, email, password: 'Vendor1234', phone: '+94770000000' });
+  const id = res.user._id || res.user.id;
+  await User.updateOne(
+    { _id: id },
+    {
+      $set: {
+        role: 'vendor',
+        companyName: `${name} Prints`,
+        businessRegNo: `PV-${Math.floor(Math.random() * 1e6)}`,
+        capabilities,
+        maxCapacity,
+        licenseExpiryDate: new Date(inYears(1)),
+        isVerified: false,
+        vendorStatus: 'APPROVED',
+      },
+    }
+  );
+  return { token: res.token, id };
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────────────────
@@ -776,4 +787,147 @@ test('phase 5: vendor posts are filtered and validated, the feed paginates, Dire
   await ok('DELETE', `/posts/${created.post._id}`, S.v1.token);
   const after = await ok('GET', '/posts?type=PREMIUM_CATALOG', buyer);
   assert.ok(!after.items.some((p) => p._id === created.post._id));
+});
+
+// ── 22. KYB onboarding: buyer applies, admin reviews, buyer becomes a vendor ─────────────
+test('KYB: buyer-only sign-up, private document upload, admin review with changes requested, approval upgrades the role', async () => {
+  const sharp = require('sharp');
+  const { VendorApplication, KybAccessLog } = require('../../models');
+  const day = 86400000;
+  const isoDaysAgo = (n) => new Date(Date.now() - n * day).toISOString().slice(0, 10);
+  const png = (hex) => sharp({ create: { width: 24, height: 16, channels: 3, background: hex } }).png().toBuffer();
+  const pdf = (tag) => Buffer.from(`%PDF-1.4\n% ${tag}\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n`, 'latin1');
+  const upload = async (token, type, buffer, { name = 'file.png', mime = 'image/png', issuedOn } = {}) => {
+    const form = new FormData();
+    form.append('type', type);
+    if (issuedOn) form.append('issuedOn', issuedOn);
+    form.append('file', new Blob([buffer], { type: mime }), name);
+    const res = await fetch(`${BASE}/api/kyb/application/documents`, { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: form });
+    return { status: res.status, body: await res.json().catch(() => ({})) };
+  };
+
+  // Sign-up is buyer-only.
+  const asVendor = await api('POST', '/auth/register', null, { role: 'vendor', name: 'Wannabe', email: 'wannabe@e2e.test', password: 'Vendor1234', phone: '+94771112222' });
+  assert.equal(asVendor.status, 400);
+  assert.equal(asVendor.body.code, 'REGISTER_BUYER_ONLY');
+  const applicant = await ok('POST', '/auth/register', null, { name: 'Nuwan Perera', email: 'kyb@e2e.test', password: 'Buyer1234', phone: '+94771113333' });
+  const token = applicant.token;
+  const userId = applicant.user._id || applicant.user.id;
+  const other = (await ok('POST', '/auth/register', null, { name: 'Other Buyer', email: 'kyb2@e2e.test', password: 'Buyer1234', phone: '+94771114444' })).token;
+
+  // Postman-style escalation attempts change nothing.
+  await ok('PATCH', '/auth/me', token, { role: 'vendor', isVerified: true, vendorStatus: 'APPROVED' });
+  const me = await ok('GET', '/auth/me', token);
+  assert.equal(me.user.role, 'buyer');
+  assert.notEqual(me.user.vendorStatus, 'APPROVED');
+
+  // Draft: validation, NIC never stored in full.
+  const bad = await api('PUT', '/kyb/application', token, { business: { legalName: 'Call 0771234567 Prints' }, owner: { nic: '12345' } });
+  assert.equal(bad.status, 400);
+  assert.ok(bad.body.details.some((d) => /phone numbers/.test(d)) && bad.body.details.some((d) => /NIC must be/.test(d)), JSON.stringify(bad.body));
+  const business = {
+    legalName: 'Nuwan Garments (Pvt) Ltd',
+    businessRegNo: 'PV 99881'.replace(' ', ''),
+    address: { line1: '45 Galle Road', city: 'Moratuwa', district: 'Colombo' },
+    capabilities: ['Screen Printing', 'DTF'],
+    maxCapacity: 800,
+    licenseExpiryDate: inYears(1),
+  };
+  const draft = (await ok('PUT', '/kyb/application', token, { business, owner: { fullName: 'Nuwan Perera', nic: '881234567V' } })).application;
+  assert.equal(draft.status, 'DRAFT');
+  assert.equal(draft.owner.nicLast4, '4567');
+  const stored = await VendorApplication.findById(draft._id).select('+owner.nicHash').lean();
+  assert.match(stored.owner.nicHash, /^[a-f0-9]{64}$/);
+  assert.ok(!JSON.stringify(stored).includes('881234567'), 'the full NIC is not stored anywhere in the application');
+
+  // Uploads: content is checked, not the browser's claim.
+  const fake = await upload(token, 'BR_COPY', Buffer.from('<script>alert(1)</script>'), { name: 'br.png', mime: 'image/png' });
+  assert.equal(fake.status, 400);
+  assert.equal(fake.body.code, 'KYB_FILE_TYPE');
+  const scripted = await upload(token, 'BR_COPY', pdf('x /JavaScript (app.alert(1))'), { name: 'br.pdf', mime: 'application/pdf' });
+  assert.equal(scripted.body.code, 'KYB_PDF_REJECTED');
+
+  const incomplete = await api('POST', '/kyb/application/submit', token, { consent: true });
+  assert.equal(incomplete.status, 400);
+  assert.equal(incomplete.body.code, 'KYB_INCOMPLETE');
+
+  let view;
+  view = (await upload(token, 'BR_COPY', pdf('br'), { name: 'br.pdf', mime: 'application/pdf' })).body.application;
+  view = (await upload(token, 'NIC_FRONT', await png('#112233'), { name: 'nic-front.png' })).body.application;
+  view = (await upload(token, 'NIC_BACK', await png('#223344'))).body.application;
+  view = (await upload(token, 'UTILITY_BILL', await png('#334455'), { issuedOn: isoDaysAgo(20) })).body.application;
+  for (const [i, ago] of [10, 45, 80].entries()) {
+    // eslint-disable-next-line no-await-in-loop
+    view = (await upload(token, 'PAST_INVOICE', pdf(`invoice-${i}`), { name: `inv${i}.pdf`, mime: 'application/pdf', issuedOn: isoDaysAgo(ago) })).body.application;
+  }
+  assert.equal(view.documents.length, 7);
+  assert.deepEqual(view.problems, []);
+  assert.ok(!JSON.stringify(view).includes('storageKey') && !JSON.stringify(view).includes('kyb/'), 'storage locations never reach the client');
+
+  // Nobody else can see or touch this application (no ids in applicant routes).
+  const otherView = await ok('GET', '/kyb/application', other);
+  assert.equal(otherView.application, null);
+  assert.equal((await api('GET', `/admin/vendor-applications/${draft._id}`, token)).status, 403, 'applicants cannot use admin routes');
+
+  assert.equal((await api('POST', '/kyb/application/submit', token, {})).body.code, 'KYB_CONSENT_REQUIRED');
+  const submitted = (await ok('POST', '/kyb/application/submit', token, { consent: true })).application;
+  assert.equal(submitted.status, 'PENDING_APPROVAL');
+  assert.equal((await api('PUT', '/kyb/application', token, { business: { legalName: 'Changed' } })).body.code, 'KYB_LOCKED', 'locked while under review');
+
+  // Admin review: queue, logged document access, request changes.
+  const queue = await ok('GET', '/admin/vendor-applications', S.admin);
+  assert.ok(queue.items.some((a) => a._id === draft._id));
+  const full = (await ok('GET', `/admin/vendor-applications/${draft._id}`, S.admin)).application;
+  const brDoc = full.documents.find((d) => d.type === 'BR_COPY');
+  const file = await fetch(`${BASE}/api/admin/vendor-applications/${draft._id}/documents/${brDoc._id}`, { headers: { authorization: `Bearer ${S.admin}` } });
+  assert.equal(file.status, 200);
+  assert.equal(file.headers.get('content-type'), 'application/pdf');
+  assert.match(file.headers.get('cache-control'), /no-store/);
+  assert.ok((await file.text()).startsWith('%PDF-'));
+  assert.equal(await KybAccessLog.countDocuments({ applicationId: draft._id, action: 'VIEW' }), 1, 'the view was logged');
+  assert.equal((await api('GET', `/admin/vendor-applications/${draft._id}/documents/${brDoc._id}`, token)).status, 403);
+
+  const notAllAccepted = await api('POST', `/admin/vendor-applications/${draft._id}/decision`, S.admin, { outcome: 'APPROVED' });
+  assert.equal(notAllAccepted.body.code, 'KYB_DOCUMENTS_NOT_ACCEPTED', 'approval needs every document accepted');
+  const bill = full.documents.find((d) => d.type === 'UTILITY_BILL');
+  await ok('POST', `/admin/vendor-applications/${draft._id}/documents/${bill._id}/review`, S.admin, { status: 'REJECTED', reason: 'The address on the bill is not readable' });
+  const changes = (await ok('POST', `/admin/vendor-applications/${draft._id}/decision`, S.admin, { outcome: 'CHANGES_REQUESTED', notes: 'Please upload a clearer bill' })).application;
+  assert.equal(changes.status, 'CHANGES_REQUESTED');
+
+  // Applicant sees the reason, replaces the bill and resubmits.
+  const mine = (await ok('GET', '/kyb/application', token)).application;
+  assert.equal(mine.documents.find((d) => d.type === 'UTILITY_BILL').review.reason, 'The address on the bill is not readable');
+  await upload(token, 'UTILITY_BILL', await png('#556677'), { issuedOn: isoDaysAgo(5) });
+  assert.equal((await ok('POST', '/kyb/application/submit', token, { consent: true })).application.submissionCount, 2);
+
+  // Approve: accept every document, then decide. The role changes only here.
+  const again = (await ok('GET', `/admin/vendor-applications/${draft._id}`, S.admin)).application;
+  for (const d of again.documents) {
+    // eslint-disable-next-line no-await-in-loop
+    await ok('POST', `/admin/vendor-applications/${draft._id}/documents/${d._id}/review`, S.admin, { status: 'ACCEPTED' });
+  }
+  const approved = (await ok('POST', `/admin/vendor-applications/${draft._id}/decision`, S.admin, { outcome: 'APPROVED', notes: 'Verified' })).application;
+  assert.equal(approved.status, 'APPROVED');
+  const twice = await api('POST', `/admin/vendor-applications/${draft._id}/decision`, S.admin, { outcome: 'REJECTED', notes: 'Too late now' });
+  assert.equal(twice.body.code, 'KYB_INVALID_TRANSITION', 'a decided application cannot be decided again');
+
+  const vendor = await User.findById(userId);
+  assert.equal(vendor.role, 'vendor');
+  assert.equal(vendor.vendorStatus, 'APPROVED');
+  assert.equal(vendor.isVerified, true);
+  assert.equal(vendor.companyName, 'Nuwan Garments (Pvt) Ltd');
+  assert.deepEqual(vendor.qualificationIssues(), []);
+  // The same token now works for vendor features (roles are read from the database on every request).
+  const post = await api('POST', '/posts', token, { postType: 'INSPIRATION', title: 'Our first post', images: [`/uploads/logos/${userId}-1731480000000-a1b2c3d4.jpg`] });
+  assert.equal(post.status, 201, JSON.stringify(post.body));
+  assert.equal((await api('PUT', '/kyb/application', token, { business: {} })).status, 403, 'vendors cannot reapply');
+
+  // Rejection starts a cooling-off period.
+  const rejectedUser = await ok('POST', '/auth/register', null, { name: 'Reject Me', email: 'kyb3@e2e.test', password: 'Buyer1234', phone: '+94771115555' });
+  const rejApp = (await ok('PUT', '/kyb/application', rejectedUser.token, { business: { legalName: 'Shady Shirts' } })).application;
+  await VendorApplication.updateOne({ _id: rejApp._id }, { $set: { status: 'PENDING_APPROVAL' } });
+  await ok('POST', `/admin/vendor-applications/${rejApp._id}/decision`, S.admin, { outcome: 'REJECTED', notes: 'Documents do not match' });
+  const cooled = await api('PUT', '/kyb/application', rejectedUser.token, { business: { legalName: 'Shady Shirts 2' } });
+  assert.equal(cooled.status, 409);
+  assert.equal(cooled.body.code, 'KYB_COOLDOWN');
 });

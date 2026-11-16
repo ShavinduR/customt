@@ -77,63 +77,33 @@ function parseLicenseDate(raw) {
 }
 
 /**
- * POST /api/auth/register
- * Buyer:  { role:"buyer", name, email, password, phone }
- * Vendor: { role:"vendor", name, email, password, phone, companyName, capabilities[], maxCapacity, businessRegNo, licenseExpiryDate? }
+ * POST /api/auth/register { name, email, password, phone }
+ * Unified registration: every account starts as a BUYER. Selling requires a KYB application
+ * (/api/kyb) approved by an administrator; "role" in the body is ignored except to give a clear error.
  */
 router.post(
   '/register',
   authLimiter,
   asyncHandler(async (req, res) => {
     const { name, email, password, phone } = req.body;
-    const role = req.body.role || ROLES.BUYER;
-
-    if (![ROLES.BUYER, ROLES.VENDOR].includes(role)) {
-      throw ApiError.badRequest('You can register as a buyer or a vendor only');
+    if (req.body.role !== undefined && req.body.role !== ROLES.BUYER) {
+      throw ApiError.badRequest('Everyone registers as a buyer. To sell on CustomT, sign in and apply from "Sell on CustomT".', {
+        code: 'REGISTER_BUYER_ONLY',
+      });
     }
     if (!PASSWORD_RULE.test(String(password || ''))) {
       throw ApiError.badRequest('Password must be 8-64 characters and contain at least one letter and one number');
     }
     assertCleanDisplayName('Name', name);
-    if (role === ROLES.VENDOR) assertCleanDisplayName('Company name', req.body.companyName);
     if (await User.exists({ email: String(email || '').toLowerCase().trim() })) {
       throw ApiError.conflict('An account with this email already exists');
     }
 
-    const user = new User({ name, email, phone, role });
-
-    if (role === ROLES.VENDOR) {
-      const maxCapacity = Number(req.body.maxCapacity);
-      Object.assign(user, {
-        companyName: req.body.companyName,
-        businessRegNo: req.body.businessRegNo,
-        capabilities: parseCapabilities(req.body.capabilities),
-        maxCapacity: Number.isFinite(maxCapacity) ? maxCapacity : undefined,
-        licenseExpiryDate: parseLicenseDate(req.body.licenseExpiryDate),
-        isVerified: false,
-      });
-    }
-
+    const user = new User({ name, email, phone, role: ROLES.BUYER });
     await user.setPassword(password);
     await user.save();
 
-    if (role === ROLES.VENDOR) {
-      realtime.emitToRole(ROLES.ADMIN, 'vendor:registered', {
-        vendorId: String(user._id),
-        name: user.name,
-        companyName: user.companyName,
-        capabilities: user.capabilities,
-        maxCapacity: user.maxCapacity,
-      });
-    }
-
-    res.status(201).json({
-      ...authResponse(user),
-      message:
-        role === ROLES.VENDOR
-          ? 'Registration received. Your business will be able to join auctions once a CustomT administrator verifies it.'
-          : 'Welcome to CustomT!',
-    });
+    res.status(201).json({ ...authResponse(user), message: 'Welcome to CustomT!' });
   })
 );
 

@@ -44,6 +44,10 @@ class ApiError extends Error {
     return new ApiError(429, message, opts);
   }
 
+  static serviceUnavailable(message, opts) {
+    return new ApiError(503, message, opts);
+  }
+
   static paymentRequired(message, opts) {
     return new ApiError(402, message, opts);
   }
