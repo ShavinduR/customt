@@ -32,7 +32,7 @@ src/
 │   └── orders/                 # OrderProgress, EscrowBreakdown, PaymentModal, O2OPanel, DisputeModal, DisputeThread, RatingModal
 └── pages/
     ├── Landing, Account, NotFound
-    ├── auth/                   # Login (demo quick-fill), Register (buyer / vendor PERA fields)
+    ├── auth/                   # Login (demo quick-fill), Register (everyone starts as a buyer)
     ├── feed/                   # GlobalFeed (infinite scroll), VendorStorefront (micro-storefront, Direct Quote)
     ├── buyer/                  # Dashboard, CreateRFQ (configurator), RFQList, RFQDetail (live auction), OrdersList, OrderDetail
     ├── vendor/                 # VendorDashboard, RFQFeed (live), AuctionRoom (rank-only), MyBids, VendorOrders, VendorOrderDetail, Wallet
@@ -79,7 +79,8 @@ All `/vendor` pages sit inside `VendorStatusLayout`, which loads the PERA qualif
 ## Admin flow
 
 1. **Overview** (`/admin`): KPIs, the demand trend, vendors awaiting verification, open disputes, and live auctions flagged for price variance. Everything refreshes on socket events.
-2. **Vendors** (`/admin/vendors`): verify with a prequalification checklist and license date (this is the PERA qualification lock), revoke verification, and assign skill badges. New registrations appear live.
+2. **KYB** (`/admin/kyb`): review vendor applications. Open each document (every view is logged), accept it or give a reason, then approve (the buyer account becomes a vendor), request changes, or reject (30-day wait before reapplying).
+3. **Vendors** (`/admin/vendors`): manage existing vendor accounts: licence renewals, revoking verification, skill badges.
 3. **Auctions** (`/admin/auctions`): full leaderboards of every open auction, updated live, with variance and no-bid filters.
 4. **Disputes** (`/admin/disputes` → `/admin/orders/:id`):
    - The admin sees the verbatim buyer statement (vendors only see a softened version), the tone flag and the full communication log.

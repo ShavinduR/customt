@@ -110,7 +110,7 @@ Every response is `{ success, ... }`. Errors look like `{ success:false, message
 ### Auth: `/api/auth`
 | Method | Path | Body | Role |
 |---|---|---|---|
-| POST | `/register` | buyer: `{role:"buyer", name, email, password, phone}`; vendor: `+ companyName, businessRegNo, capabilities[], maxCapacity, licenseExpiryDate?` | public |
+| POST | `/register` | `{name, email, password, phone}`. Every account starts as a **buyer**; `role:"vendor"` gives 400 `REGISTER_BUYER_ONLY` (vendors apply through KYB) | public |
 | POST | `/login` | `{email, password}` → `{token, user}` | public |
 | GET | `/me` | (vendors also receive `qualificationIssues[]`) | any |
 | PATCH | `/me` | `{name?, phone?, companyName?, capabilities?, maxCapacity?, licenseExpiryDate?}`. Expanding vendor scope resets verification. | any |
@@ -153,6 +153,24 @@ Every response is `{ success, ... }`. Errors look like `{ success:false, message
 | GET | `/api/vendors/:id/storefront` | `?type=&cursor=&limit=` → `{vendor, tabs:{PREMIUM_CATALOG, INSPIRATION, CLEARANCE}, tab, items[], nextCursor, canRequestDirectQuote}`. No phone/e-mail | any |
 
 **Direct RFQ.** `POST /api/rfqs` with `directVendorId` creates an auction only that vendor can see and bid on (`isDirect: true`). The vendor must pass every PERA lock for the design (otherwise **422 PERA_DIRECT_VENDOR_LOCK**), and other vendors get **403 DIRECT_RFQ_OTHER_VENDOR**. Accepting the bid creates a normal order, so payment still goes through escrow, the 30%/70% milestones and O2O verification.
+
+### Vendor onboarding (KYB): `/api/kyb` and `/api/admin/vendor-applications`
+Applicant routes have **no ids**: they always act on the caller's own application.
+
+| Method | Path | Body / Notes | Role |
+|---|---|---|---|
+| GET | `/api/kyb/application` | status, current (or latest) application, `problems[]` checklist and the document rules | buyer, vendor |
+| PUT | `/api/kyb/application` | `{business:{legalName, tradingName?, businessRegNo, address:{line1, line2?, city, district, postalCode?}, capabilities[], maxCapacity, licenseExpiryDate}, owner:{fullName, nic}}`. The NIC is stored only as an HMAC fingerprint plus its last 4 characters | buyer |
+| POST | `/api/kyb/application/documents` | multipart `file` + `type` (`BR_COPY`, `NIC_FRONT`, `NIC_BACK`, `UTILITY_BILL`, `PAST_INVOICE`) + `issuedOn` (bill / invoice date). PDF, JPG or PNG up to 8 MB, checked by content; risky PDFs refused; images re-encoded without metadata; stored in private R2 | buyer |
+| DELETE | `/api/kyb/application/documents/:docId` | remove a document from your own draft | buyer |
+| POST | `/api/kyb/application/submit` | `{consent:true}` → `PENDING_APPROVAL` (needs BR, NIC, a bill from the last 3 months, and 3–10 invoices from the last 12 months across 2+ months) | buyer |
+| POST | `/api/kyb/application/withdraw` | withdraw; documents are deleted | buyer |
+| GET | `/api/admin/vendor-applications` | `?status=PENDING_APPROVAL,...` queue | admin |
+| GET | `/api/admin/vendor-applications/:id` | details, documents (no storage locations), risk flags, history | admin |
+| GET | `/api/admin/vendor-applications/:id/documents/:docId` | streams the file (`no-store`, sandboxed); logged in `KybAccessLog` | admin |
+| GET | `/api/admin/vendor-applications/:id/documents/:docId/link` | 60-second presigned R2 link; logged | admin |
+| POST | `/api/admin/vendor-applications/:id/documents/:docId/review` | `{status: ACCEPTED\|REJECTED, reason?}` | admin |
+| POST | `/api/admin/vendor-applications/:id/decision` | `{outcome: APPROVED\|CHANGES_REQUESTED\|REJECTED, notes?}`. **Approval is the only way a buyer becomes a vendor** (all documents must be accepted). Rejection blocks reapplying for 30 days | admin |
 
 ### Orders: `/api/orders`
 | Method | Path | Body | Role |

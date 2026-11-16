@@ -85,7 +85,8 @@ async function upsertUser(data, password) {
     console.log(`  = ${data.email} already exists (${existing.role})`);
     return existing;
   }
-  const user = new User(data);
+  // Demo vendors are created as already-approved (grandfathered) vendor accounts; real ones go through KYB.
+  const user = new User(data.role === ROLES.VENDOR ? { vendorStatus: 'APPROVED', ...data } : data);
   await user.setPassword(password);
   await user.save();
   // eslint-disable-next-line no-console

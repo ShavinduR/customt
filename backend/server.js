@@ -18,6 +18,7 @@ const { notFound, errorHandler } = require('./middleware/errorHandler');
 const realtime = require('./services/realtime');
 const { registerSocketHandlers } = require('./sockets');
 const { startAuctionScheduler, stopAuctionScheduler } = require('./services/auctionService');
+const { startRetentionScheduler, stopRetentionScheduler } = require('./services/kybService');
 
 const authRoutes = require('./routes/authRoutes');
 const rfqRoutes = require('./routes/rfqRoutes');
@@ -28,6 +29,8 @@ const metaRoutes = require('./routes/metaRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
 const postRoutes = require('./routes/postRoutes');
 const storefrontRoutes = require('./routes/storefrontRoutes');
+const kybRoutes = require('./routes/kybRoutes');
+const adminKybRoutes = require('./routes/adminKybRoutes');
 
 function corsOrigin(origin, callback) {
   // Allow same-origin / server-to-server requests (no Origin header) and configured frontends.
@@ -78,10 +81,12 @@ function createApp() {
   app.use('/api/rfqs', rfqRoutes);
   app.use('/api/orders', orderRoutes);
   app.use('/api/vendor', vendorRoutes);
+  app.use('/api/admin/vendor-applications', adminKybRoutes); // before /api/admin so its router handles these paths
   app.use('/api/admin', adminRoutes);
   app.use('/api/uploads', uploadRoutes);
   app.use('/api/posts', postRoutes);
   app.use('/api/vendors', storefrontRoutes);
+  app.use('/api/kyb', kybRoutes);
 
   app.use(notFound);
   app.use(errorHandler);
@@ -115,6 +120,7 @@ async function start() {
   });
 
   startAuctionScheduler();
+  startRetentionScheduler();
 
   let shuttingDown = false;
   const shutdown = async (signal) => {
@@ -123,6 +129,7 @@ async function start() {
     // eslint-disable-next-line no-console
     console.log(`[server] ${signal} received - shutting down gracefully`);
     stopAuctionScheduler();
+    stopRetentionScheduler();
     io.close();
     server.close(async () => {
       await disconnectDB();

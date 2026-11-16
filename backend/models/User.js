@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
-const { ROLES, PRINT_TYPES, SKILL_BADGES, TRUST, POSTS } = require('../config/constants');
+const { ROLES, PRINT_TYPES, SKILL_BADGES, TRUST, POSTS, VENDOR_STATUS } = require('../config/constants');
 const { isUploadedFileUrl } = require('../utils/uploadUrl');
 
 const isVendor = function isVendor() {
@@ -67,6 +67,13 @@ const userSchema = new mongoose.Schema(
     verifiedAt: { type: Date },
     verifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     verificationNotes: { type: String, trim: true, maxlength: 500 },
+
+    // ── KYB onboarding. `role` changes from buyer to vendor ONLY in the admin approval service. ──
+    vendorStatus: { type: String, enum: Object.values(VENDOR_STATUS), default: VENDOR_STATUS.NONE, index: true },
+    currentApplicationId: { type: mongoose.Schema.Types.ObjectId, ref: 'VendorApplication' },
+    kybApprovedAt: { type: Date },
+    kybApprovedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    reapplyAfter: { type: Date }, // cooling-off period after a rejected application
 
     // ── Micro-storefront (Phase 5). The bio is contact-filtered by the route before it is saved.
     storefront: {

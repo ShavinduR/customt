@@ -180,6 +180,40 @@ const POSTS = Object.freeze({
   BIO_MAX: 500,
 });
 
+/** KYB vendor onboarding (single role: a buyer is upgraded to vendor on admin approval). */
+const VENDOR_STATUS = Object.freeze({
+  NONE: 'NONE',
+  DRAFT: 'DRAFT',
+  PENDING_APPROVAL: 'PENDING_APPROVAL',
+  CHANGES_REQUESTED: 'CHANGES_REQUESTED',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+});
+
+const KYB = Object.freeze({
+  DOC_TYPES: ['BR_COPY', 'NIC_FRONT', 'NIC_BACK', 'UTILITY_BILL', 'PAST_INVOICE'],
+  DOC_LABELS: {
+    BR_COPY: 'Business Registration (BR) copy',
+    NIC_FRONT: 'NIC - front',
+    NIC_BACK: 'NIC - back',
+    UTILITY_BILL: 'Utility bill (proof of location)',
+    PAST_INVOICE: 'Past business invoice',
+  },
+  // Per-type file count limits.
+  MAX_PER_TYPE: { BR_COPY: 1, NIC_FRONT: 1, NIC_BACK: 1, UTILITY_BILL: 1, PAST_INVOICE: 10 },
+  INVOICES_MIN: 3,
+  INVOICES_MAX: 10,
+  INVOICE_WINDOW_MONTHS: 12,
+  INVOICE_MIN_DISTINCT_MONTHS: 2,
+  UTILITY_BILL_MAX_AGE_MONTHS: 3,
+  MAX_FILE_MB: 8,
+  MAX_TOTAL_MB: 40,
+  MIME_TYPES: ['application/pdf', 'image/jpeg', 'image/png'],
+  REAPPLY_COOLDOWN_DAYS: 30,
+  REJECTED_RETENTION_DAYS: 180, // documents of rejected / withdrawn applications are deleted after this
+  UPLOADS_PER_HOUR: 30,
+});
+
 module.exports = {
   ROLES,
   PRINT_TYPES,
@@ -206,4 +240,6 @@ module.exports = {
   DISPUTE_RESOLUTIONS,
   POST_TYPES,
   POSTS,
+  VENDOR_STATUS,
+  KYB,
 };

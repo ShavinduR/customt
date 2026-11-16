@@ -29,6 +29,8 @@ const NOTIFY = {
   'vendor:registered': { tone: 'info', title: 'Vendor awaiting verification', text: (p) => `${p.companyName || p.name}${p.reverification ? ' changed their profile and needs re-verification' : ' registered'}.` },
   'dispute:note': { tone: 'info', title: 'New dispute message', text: (p) => `Order ${p.orderCode}` },
   'vendor:verification': { tone: 'success', title: 'Verification update', text: (p) => p.message },
+  'kyb:decision': { tone: 'info', title: 'Vendor application update', text: (p) => p.message },
+  'kyb:submitted': { tone: 'info', title: 'New vendor application', text: (p) => `${p.businessName || 'A business'} ${p.resubmission ? 'resubmitted' : 'submitted'} KYB documents for review.` },
   'chat:message': {
     tone: 'info',
     title: 'New message',
@@ -70,7 +72,12 @@ export function SocketProvider({ children }) {
       reconnectionDelayMax: 8000,
     });
     instance.on('connect', () => setConnected(true));
-    instance.on('disconnect', () => setConnected(false));
+    instance.on('disconnect', (reason) => {
+      setConnected(false);
+      // The server closes sockets after a role change (KYB approval) or a password change. socket.io does
+      // not reconnect on its own after a server-side disconnect, so try once; a stale token is refused.
+      if (reason === 'io server disconnect') setTimeout(() => instance.connect(), 1000);
+    });
     instance.on('connect_error', () => setConnected(false));
 
     Object.entries(NOTIFY).forEach(([event, cfg]) => {
