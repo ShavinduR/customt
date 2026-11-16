@@ -91,7 +91,7 @@ export const uploadApi = {
 };
 
 export const rfqApi = {
-  preview: (designSpecs) => unwrap(http.post('/rfqs/preview', { designSpecs })),
+  preview: (designSpecs, directVendorId) => unwrap(http.post('/rfqs/preview', { designSpecs, ...(directVendorId ? { directVendorId } : {}) })),
   create: (payload) => unwrap(http.post('/rfqs', payload)),
   list: (params) => unwrap(http.get('/rfqs', { params })),
   get: (id) => unwrap(http.get(`/rfqs/${id}`)),
@@ -123,6 +123,20 @@ export const vendorApi = {
   rfqs: (params) => unwrap(http.get('/vendor/rfqs', { params })),
   bids: (params) => unwrap(http.get('/vendor/bids', { params })),
   wallet: () => unwrap(http.get('/vendor/wallet')),
+  updateStorefront: (payload) => unwrap(http.patch('/vendor/storefront', payload)),
+};
+
+/** Phase 5: Global Feed and vendor posts. `cursor` comes from the previous page's `nextCursor`. */
+export const postApi = {
+  feed: ({ type, cursor, limit } = {}) => unwrap(http.get('/posts', { params: { type: type || undefined, cursor: cursor || undefined, limit } })),
+  get: (id) => unwrap(http.get(`/posts/${id}`)),
+  create: (payload) => unwrap(http.post('/posts', payload)),
+  remove: (id) => unwrap(http.delete(`/posts/${id}`)),
+};
+
+export const storefrontApi = {
+  get: (vendorId, { type, cursor, limit } = {}) =>
+    unwrap(http.get(`/vendors/${vendorId}/storefront`, { params: { type: type || undefined, cursor: cursor || undefined, limit } })),
 };
 
 export const adminApi = {

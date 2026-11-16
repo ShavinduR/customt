@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CalendarClock, Crown, Gavel, Hourglass, Layers, Radio, Ruler, Sparkles } from 'lucide-react';
+import { CalendarClock, Crown, Gavel, Hourglass, Layers, Radio, Ruler, Sparkles, Store } from 'lucide-react';
 import { vendorApi } from '../../api/client';
 import { useSocket, useSocketEvent } from '../../context/SocketContext';
 import { useVendorStatus } from '../../context/VendorStatusContext';
@@ -22,6 +22,11 @@ export function VendorRfqCard({ rfq, onBid, isNew = false }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
             {isNew && <Badge tone="green">New</Badge>}
+            {rfq.isDirect && (
+              <Badge tone="violet" icon={Store}>
+                Direct quote for you
+              </Badge>
+            )}
             <span className="font-mono text-xs text-slate-400">{rfq.rfqCode}</span>
           </div>
           <h3 className="mt-0.5 truncate font-semibold text-slate-900">{rfq.title}</h3>

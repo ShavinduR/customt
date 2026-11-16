@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { BarChart3, ChevronDown, MessagesSquare, Gavel, History, Scale, ShieldCheck, Users, LayoutDashboard, LogOut, Menu, Package, PencilRuler, Radio, Shirt, UserCircle, Wallet, Wifi, WifiOff, X } from 'lucide-react';
+import { BarChart3, ChevronDown, Compass, Store, MessagesSquare, Gavel, History, Scale, ShieldCheck, Users, LayoutDashboard, LogOut, Menu, Package, PencilRuler, Radio, Shirt, UserCircle, Wallet, Wifi, WifiOff, X } from 'lucide-react';
 import { useAuth, roleHome } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import NotificationBell from './NotificationBell';
@@ -9,6 +9,7 @@ import { initials } from '../../utils/format';
 
 const NAV = {
   buyer: [
+    { to: '/feed', label: 'Discover', icon: Compass },
     { to: '/buyer', label: 'Dashboard', icon: LayoutDashboard, end: true },
     { to: '/buyer/rfqs/new', label: 'Design & Launch', icon: PencilRuler },
     { to: '/buyer/rfqs', label: 'My Auctions', icon: Gavel, end: true },
@@ -20,6 +21,7 @@ const NAV = {
     { to: '/vendor/bids', label: 'My Bids', icon: History },
     { to: '/vendor/orders', label: 'Orders', icon: Package },
     { to: '/vendor/wallet', label: 'Wallet', icon: Wallet },
+    { to: (user) => `/vendors/${user._id}`, label: 'Storefront', icon: Store },
   ],
   admin: [
     { to: '/admin', label: 'Overview', icon: LayoutDashboard, end: true },
@@ -108,7 +110,7 @@ export default function AppLayout() {
   const { connected } = useSocket();
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
-  const links = NAV[user.role] || [];
+  const links = (NAV[user.role] || []).map((link) => ({ ...link, to: typeof link.to === 'function' ? link.to(user) : link.to }));
 
   useEffect(() => setMobileOpen(false), [location.pathname]);
 

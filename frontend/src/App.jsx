@@ -36,6 +36,8 @@ import AdminOrderDetail from './pages/admin/AdminOrderDetail';
 import Analytics from './pages/admin/Analytics';
 import UsersAdmin from './pages/admin/UsersAdmin';
 import Conversations from './pages/admin/Conversations';
+import GlobalFeed from './pages/feed/GlobalFeed';
+import VendorStorefront from './pages/feed/VendorStorefront';
 
 function HomeRoute() {
   const { user, initialising } = useAuth();
@@ -62,6 +64,8 @@ export default function App() {
                 <Route element={<ProtectedRoute />}>
                   <Route element={<AppLayout />}>
                     <Route path="/account" element={<Account />} />
+                    <Route path="/feed" element={<GlobalFeed />} />
+                    <Route path="/vendors/:id" element={<VendorStorefront />} />
 
                     <Route element={<ProtectedRoute roles={['buyer']} />}>
                       <Route path="/buyer" element={<BuyerDashboard />} />

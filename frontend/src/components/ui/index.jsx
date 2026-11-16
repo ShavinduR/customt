@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useEffect, useId, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Info, Loader2, X, XCircle, Star } from 'lucide-react';
 import { statusMeta } from '../../utils/status';
@@ -21,22 +22,30 @@ const BUTTON_SIZES = {
   lg: 'h-12 px-6 text-base gap-2',
 };
 
+export const buttonClass = (variant = 'primary', size = 'md', className) =>
+  cx(
+    'inline-flex items-center justify-center whitespace-nowrap rounded-lg font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60',
+    BUTTON_VARIANTS[variant],
+    BUTTON_SIZES[size],
+    className
+  );
+
 export function Button({ variant = 'primary', size = 'md', loading = false, icon: Icon, className, children, disabled, type = 'button', ...props }) {
   return (
-    <button
-      type={type}
-      disabled={disabled || loading}
-      className={cx(
-        'inline-flex items-center justify-center whitespace-nowrap rounded-lg font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60',
-        BUTTON_VARIANTS[variant],
-        BUTTON_SIZES[size],
-        className
-      )}
-      {...props}
-    >
+    <button type={type} disabled={disabled || loading} className={buttonClass(variant, size, className)} {...props}>
       {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : Icon ? <Icon className="h-4 w-4" /> : null}
       {children}
     </button>
+  );
+}
+
+/** A router link that looks like a Button (never nest a <button> inside an <a>). */
+export function ButtonLink({ to, variant = 'primary', size = 'md', icon: Icon, className, children, ...props }) {
+  return (
+    <Link to={to} className={buttonClass(variant, size, className)} {...props}>
+      {Icon && <Icon className="h-4 w-4" />}
+      {children}
+    </Link>
   );
 }
 

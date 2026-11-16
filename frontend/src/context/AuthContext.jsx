@@ -7,7 +7,7 @@ const AuthContext = createContext(null);
 export function roleHome(role) {
   switch (role) {
     case 'buyer':
-      return '/buyer';
+      return '/feed'; // buyers land on the Global Feed (Phase 5)
     case 'vendor':
       return '/vendor';
     case 'admin':
