@@ -7,8 +7,8 @@ process.env.JWT_SECRET = process.env.JWT_SECRET || 'unit-test-secret-unit-test-s
 const { Post } = require('../models');
 const { encodeCursor, decodeCursor } = require('../services/feedService');
 
-const IMG = '/uploads/logos/0123456789abcdef01234567-1731480000000-a1b2c3d4.jpg';
 const vendorId = new mongoose.Types.ObjectId();
+const IMG = `/uploads/logos/${vendorId}-1731480000000-a1b2c3d4.jpg`;
 const premium = (over = {}) => ({
   vendorId,
   postType: 'PREMIUM_CATALOG',
@@ -91,6 +91,13 @@ test('photos must be 1-6 CustomT uploads', async () => {
   assert.match((await errorsOf(premium({ images: [] }))).errors.images, /1 to 6 photos/);
   assert.match((await errorsOf(premium({ images: Array(7).fill(IMG) }))).errors.images, /1 to 6 photos/);
   assert.match((await errorsOf(premium({ images: ['https://wa.me/94771234567'] }))).errors.images, /uploaded to CustomT/);
+});
+
+test("a vendor can't publish someone else's upload, or an SVG, in a post", async () => {
+  const someoneElse = `/uploads/logos/${new mongoose.Types.ObjectId()}-1731480000000-a1b2c3d4.png`;
+  assert.match((await errorsOf(premium({ images: [someoneElse] }))).errors.images, /you uploaded/);
+  const svg = `/uploads/logos/${vendorId}-1731480000000-a1b2c3d4.svg`;
+  assert.match((await errorsOf(premium({ images: [svg] }))).errors.images, /PNG, JPG or WEBP/);
 });
 
 test('post content cannot be changed with a query update (that would skip the filter)', async () => {

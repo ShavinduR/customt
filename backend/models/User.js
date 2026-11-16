@@ -74,7 +74,12 @@ const userSchema = new mongoose.Schema(
         type: String,
         trim: true,
         default: '',
-        validate: { validator: (v) => !v || isUploadedFileUrl(v), message: 'The cover photo must be an image uploaded to CustomT' },
+        validate: {
+          validator(v) {
+            return !v || isUploadedFileUrl(v, { ownerId: this._id, rasterOnly: true });
+          },
+          message: 'The cover photo must be a PNG, JPG or WEBP image you uploaded to CustomT',
+        },
       },
       bio: { type: String, trim: true, maxlength: POSTS.BIO_MAX, default: '' },
     },

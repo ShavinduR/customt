@@ -254,7 +254,9 @@ async function updateStorefront(vendor, { coverUrl, bio } = {}) {
   const flags = [];
   if (coverUrl !== undefined) {
     const url = String(coverUrl || '').trim();
-    if (url && !isUploadedFileUrl(url)) throw ApiError.badRequest('The cover photo must be an image uploaded to CustomT');
+    if (url && !isUploadedFileUrl(url, { ownerId: vendor._id, rasterOnly: true })) {
+      throw ApiError.badRequest('The cover photo must be a PNG, JPG or WEBP image you uploaded to CustomT');
+    }
     vendor.set('storefront.coverUrl', url);
   }
   if (bio !== undefined) {
