@@ -60,6 +60,9 @@ export function AuthProvider({ children }) {
 
   const login = useCallback((email, password) => authApi.login({ email, password }).then(applySession), [applySession]);
   const register = useCallback((payload) => authApi.register(payload).then(applySession), [applySession]);
+  /** Facebook Login: exchange the one-time code from the redirect, or finish a Facebook sign-up. */
+  const exchangeLoginCode = useCallback((code) => authApi.exchange(code).then(applySession), [applySession]);
+  const completeFacebookSignup = useCallback((payload) => authApi.facebookComplete(payload).then(applySession), [applySession]);
 
   /** Swap in a new token for the current user (e.g. after a password change), keeping them signed in. */
   const replaceToken = useCallback((nextToken) => {
@@ -74,8 +77,8 @@ export function AuthProvider({ children }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, token, initialising, isAuthenticated: Boolean(user), login, register, logout, refreshUser, setUser, replaceToken }),
-    [user, token, initialising, login, register, logout, refreshUser, replaceToken]
+    () => ({ user, token, initialising, isAuthenticated: Boolean(user), login, register, exchangeLoginCode, completeFacebookSignup, logout, refreshUser, setUser, replaceToken }),
+    [user, token, initialising, login, register, exchangeLoginCode, completeFacebookSignup, logout, refreshUser, replaceToken]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -1,9 +1,24 @@
 import { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Lock, LogIn, Mail } from 'lucide-react';
 import { roleHome, useAuth } from '../../context/AuthContext';
 import AuthShell from './AuthShell';
+import FacebookButton from '../../components/auth/FacebookButton';
 import { Alert, Button, ErrorList, Field, Input } from '../../components/ui';
+
+/** Messages for ?oauthError=… set by the API after a Facebook sign-in attempt. */
+const OAUTH_ERRORS = {
+  cancelled: 'Facebook sign-in was cancelled.',
+  state_mismatch: 'That sign-in link expired or was opened in another browser. Please try again.',
+  facebook_error: 'Facebook could not sign you in right now. Please try again, or use your e-mail and password.',
+  unavailable: 'Facebook sign-in is not available at the moment. Please use your e-mail and password.',
+  suspended: 'Your account has been suspended. Please contact support.',
+  no_email:
+    'Your Facebook account does not share an e-mail address, so we cannot create a CustomT account from it. Please create an account with your e-mail instead.',
+  email_exists:
+    'A CustomT account already uses the e-mail on your Facebook account. Sign in with your password below, then link Facebook from your Account page.',
+  account_unavailable: 'This account is not available.',
+};
 
 const DEMO_ACCOUNTS = [
   { label: 'Buyer', email: 'buyer@customt.lk', password: 'Demo@12345' },
@@ -15,6 +30,8 @@ export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const oauthError = OAUTH_ERRORS[searchParams.get('oauthError')] || (searchParams.get('oauthError') ? OAUTH_ERRORS.facebook_error : null);
   const [form, setForm] = useState({ email: '', password: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -41,6 +58,12 @@ export default function Login() {
           {location.state.notice}
         </Alert>
       )}
+      {oauthError && (
+        <Alert tone="warning" className="mb-4">
+          {oauthError}
+        </Alert>
+      )}
+      <FacebookButton />
       <form onSubmit={submit} className="space-y-4" noValidate>
         <Field label="Email" htmlFor="email">
           <Input id="email" icon={Mail} type="email" autoComplete="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} required />

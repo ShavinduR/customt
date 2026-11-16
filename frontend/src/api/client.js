@@ -72,7 +72,16 @@ export const authApi = {
   changePassword: (payload) => unwrap(http.patch('/auth/me/password', payload)),
   forgotPassword: (email) => unwrap(http.post('/auth/forgot-password', { email }, { skipAuthRedirect: true })),
   resetPassword: (token, password) => unwrap(http.post('/auth/reset-password', { token, password }, { skipAuthRedirect: true })),
+  // Facebook Login
+  exchange: (code) => unwrap(http.post('/auth/exchange', { code }, { skipAuthRedirect: true })),
+  facebookSignup: (ticket) => unwrap(http.get('/auth/facebook/signup', { params: { ticket }, skipAuthRedirect: true })),
+  facebookComplete: (payload) => unwrap(http.post('/auth/facebook/complete', payload, { skipAuthRedirect: true })),
+  facebookLink: () => unwrap(http.post('/auth/facebook/link')),
+  facebookUnlink: () => unwrap(http.delete('/auth/facebook')),
 };
+
+/** Full-page navigation target that starts Facebook Login on the API (server-side OAuth). */
+export const facebookLoginUrl = (linkTicket) => `${API_URL}/api/auth/facebook${linkTicket ? `?link=${encodeURIComponent(linkTicket)}` : ''}`;
 
 export const metaApi = {
   catalog: () => unwrap(http.get('/meta/catalog')),

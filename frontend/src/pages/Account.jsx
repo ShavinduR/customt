@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, BadgeCheck, CheckCircle2, KeyRound, Save, ShieldCheck, UserCircle, Wallet } from 'lucide-react';
-import { authApi } from '../api/client';
+import { authApi, facebookLoginUrl } from '../api/client';
+import { FacebookLogo } from '../components/auth/FacebookButton';
 import { useAuth } from '../context/AuthContext';
 import { useCatalog } from '../context/CatalogContext';
 import { useSocketEvents } from '../context/SocketContext';
@@ -10,9 +12,100 @@ import { formatDate, formatLKR } from '../utils/format';
 
 const ROLE_LABEL = { buyer: 'Buyer', vendor: 'Vendor (SME printer)', admin: 'Platform administrator' };
 
+const FACEBOOK_MESSAGES = {
+  linked: { tone: 'success', text: 'Facebook is now linked. You can sign in with either Facebook or your password.' },
+  link_expired: { tone: 'warning', text: 'That link request expired. Please try again.' },
+  facebook_in_use: { tone: 'danger', text: 'That Facebook account is already linked to another CustomT account.' },
+  facebook_error: { tone: 'danger', text: 'Facebook could not complete the request. Please try again.' },
+  account_unavailable: { tone: 'danger', text: 'This account is not available.' },
+  cancelled: { tone: 'warning', text: 'Linking Facebook was cancelled.' },
+};
+
+/** Sign-in methods: link or unlink Facebook. Unlinking needs a password, so nobody locks themselves out. */
+function SignInMethodsCard() {
+  const { user, refreshUser } = useAuth();
+  const toast = useToast();
+  const [params, setParams] = useSearchParams();
+  const [busy, setBusy] = useState(false);
+  const notice = FACEBOOK_MESSAGES[params.get('facebook') || params.get('oauthError')];
+
+  useEffect(() => {
+    if (params.get('facebook') === 'linked') refreshUser().catch(() => {});
+    // Only when arriving back from Facebook.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!user.facebookLinked && !user.facebookAvailable) return null;
+
+  const connect = async () => {
+    setBusy(true);
+    try {
+      const { ticket } = await authApi.facebookLink();
+      window.location.assign(facebookLoginUrl(ticket));
+    } catch (err) {
+      toast.error(err.message);
+      setBusy(false);
+    }
+  };
+  const disconnect = async () => {
+    if (!window.confirm('Unlink Facebook? You will sign in with your e-mail and password.')) return;
+    setBusy(true);
+    try {
+      const res = await authApi.facebookUnlink();
+      toast.success(res.message);
+      await refreshUser();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader icon={ShieldCheck} title="Sign-in methods" />
+      <div className="space-y-3 p-5">
+        {notice && (
+          <Alert tone={notice.tone}>
+            {notice.text}{' '}
+            <button type="button" className="font-semibold underline" onClick={() => setParams({}, { replace: true })}>
+              Dismiss
+            </button>
+          </Alert>
+        )}
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 p-3">
+          <FacebookLogo className="h-7 w-7 text-[#1877F2]" />
+          <div className="min-w-0 flex-1">
+            <p className="font-medium text-slate-900">Facebook</p>
+            <p className="text-sm text-slate-500">{user.facebookLinked ? 'Linked: you can sign in with Facebook.' : 'Not linked.'}</p>
+          </div>
+          {user.facebookLinked ? (
+            <Button variant="secondary" size="sm" onClick={disconnect} loading={busy} disabled={!user.hasPassword}>
+              Unlink
+            </Button>
+          ) : (
+            <Button size="sm" onClick={connect} loading={busy}>
+              Link Facebook
+            </Button>
+          )}
+        </div>
+        {user.facebookLinked && !user.hasPassword && (
+          <p className="text-xs text-slate-500">
+            To unlink Facebook, first set a password with{' '}
+            <Link to="/forgot-password" className="font-medium text-brand-700 underline">
+              Forgot password
+            </Link>
+            .
+          </p>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 function PasswordCard() {
   const toast = useToast();
-  const { replaceToken } = useAuth();
+  const { user, replaceToken } = useAuth();
   const [form, setForm] = useState({ currentPassword: '', newPassword: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -32,6 +125,21 @@ function PasswordCard() {
       setBusy(false);
     }
   };
+
+  if (user && user.hasPassword === false) {
+    return (
+      <Card>
+        <CardHeader icon={KeyRound} title="Password" />
+        <p className="p-5 text-sm text-slate-600">
+          You sign in with Facebook and have no CustomT password yet. To add one, use{' '}
+          <Link to="/forgot-password" className="font-medium text-brand-700 underline">
+            Forgot password
+          </Link>{' '}
+          with your e-mail <strong>{user.email}</strong>.
+        </p>
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -219,6 +327,7 @@ export default function Account() {
             </Button>
           </form>
         </Card>
+        <SignInMethodsCard />
         <PasswordCard />
       </div>
     </div>

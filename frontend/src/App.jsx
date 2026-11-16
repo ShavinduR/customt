@@ -11,6 +11,9 @@ import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import ForgotPassword from './pages/auth/ForgotPassword';
 import ResetPassword from './pages/auth/ResetPassword';
+import AuthCallback from './pages/auth/AuthCallback';
+import FacebookComplete from './pages/auth/FacebookComplete';
+import Privacy from './pages/Privacy';
 import Account from './pages/Account';
 import NotFound from './pages/NotFound';
 import BuyerDashboard from './pages/buyer/BuyerDashboard';
@@ -62,6 +65,9 @@ export default function App() {
                   <Route path="/forgot-password" element={<ForgotPassword />} />
                 </Route>
                 <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/auth/callback" element={<AuthCallback />} />
+                <Route path="/auth/facebook/complete" element={<FacebookComplete />} />
+                <Route path="/privacy" element={<Privacy />} />
 
                 <Route element={<ProtectedRoute />}>
                   <Route element={<AppLayout />}>
