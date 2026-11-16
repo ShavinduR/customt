@@ -11,29 +11,20 @@
  */
 const { assertRequiredEnv, config } = require('../config/env');
 const { connectDB, disconnectDB } = require('../config/db');
-const { User } = require('../models');
+const { migrateKybStatuses } = require('../services/kybMigration');
 
 const apply = process.argv.includes('--apply');
 
 async function run() {
   assertRequiredEnv();
   await connectDB(config.mongoUri);
-  const vendors = { role: 'vendor', vendorStatus: { $ne: 'APPROVED' } };
-  const buyers = { role: 'buyer', vendorStatus: { $exists: false } };
-  const [vendorCount, buyerCount] = await Promise.all([User.countDocuments(vendors), User.countDocuments(buyers)]);
+  const result = await migrateKybStatuses({ apply });
   // eslint-disable-next-line no-console
-  console.log(`[migrate-kyb] ${vendorCount} vendor account(s) -> vendorStatus APPROVED (grandfathered)`);
+  console.log(`[migrate-kyb] ${result.vendorsToApprove} vendor account(s) -> vendorStatus APPROVED (grandfathered)`);
   // eslint-disable-next-line no-console
-  console.log(`[migrate-kyb] ${buyerCount} buyer account(s) -> vendorStatus NONE`);
-  if (apply) {
-    await User.updateMany(vendors, { $set: { vendorStatus: 'APPROVED' } });
-    await User.updateMany(buyers, { $set: { vendorStatus: 'NONE' } });
-    // eslint-disable-next-line no-console
-    console.log('[migrate-kyb] Done.');
-  } else {
-    // eslint-disable-next-line no-console
-    console.log('[migrate-kyb] Dry run only. Re-run with --apply to make these changes.');
-  }
+  console.log(`[migrate-kyb] ${result.buyersToInitialise} buyer account(s) -> vendorStatus NONE`);
+  // eslint-disable-next-line no-console
+  console.log(apply ? '[migrate-kyb] Done.' : '[migrate-kyb] Dry run only. Re-run with --apply to make these changes.');
   await disconnectDB();
 }
 
