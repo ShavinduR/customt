@@ -1,6 +1,5 @@
 /**
- * KYB status migration, shared by scripts/migrate-kyb.js and the TEMPORARY route
- * GET /api/run-kyb-migration (for hosts without shell access, such as Render's free plan).
+ * KYB status migration, used by scripts/migrate-kyb.js (npm run migrate:kyb).
  *
  * Existing vendor accounts are grandfathered (vendorStatus APPROVED); buyers without a status get NONE.
  * Only status labels change: role, verification and licence dates are untouched. Idempotent: a second

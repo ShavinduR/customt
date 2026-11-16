@@ -31,7 +31,6 @@ const postRoutes = require('./routes/postRoutes');
 const storefrontRoutes = require('./routes/storefrontRoutes');
 const kybRoutes = require('./routes/kybRoutes');
 const adminKybRoutes = require('./routes/adminKybRoutes');
-const tempMigrationRoutes = require('./routes/tempMigrationRoutes'); // TEMPORARY: remove after the KYB migration has run
 
 function corsOrigin(origin, callback) {
   // Allow same-origin / server-to-server requests (no Origin header) and configured frontends.
@@ -88,7 +87,6 @@ function createApp() {
   app.use('/api/posts', postRoutes);
   app.use('/api/vendors', storefrontRoutes);
   app.use('/api/kyb', kybRoutes);
-  app.use('/api', tempMigrationRoutes); // TEMPORARY: GET /api/run-kyb-migration?secret=… (remove after use)
 
   app.use(notFound);
   app.use(errorHandler);

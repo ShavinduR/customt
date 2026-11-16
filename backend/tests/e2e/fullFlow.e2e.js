@@ -931,25 +931,3 @@ test('KYB: buyer-only sign-up, private document upload, admin review with change
   assert.equal(cooled.status, 409);
   assert.equal(cooled.body.code, 'KYB_COOLDOWN');
 });
-
-// ── 23. TEMPORARY KYB migration route (remove together with routes/tempMigrationRoutes.js) ──
-test('temporary migration route: hidden without the secret, idempotent with it', async () => {
-  const hidden = await api('GET', '/run-kyb-migration?secret=wrong');
-  assert.equal(hidden.status, 404, 'a wrong secret looks like a missing route');
-
-  await User.updateOne({ email: 'v1@e2e.test' }, { $unset: { vendorStatus: 1 } }); // simulate a pre-KYB vendor
-  const dry = await ok('GET', '/run-kyb-migration?secret=migrate123&dryRun=1');
-  assert.equal(dry.applied, false);
-  assert.ok(dry.vendorsToApprove >= 1);
-  assert.equal((await User.findOne({ email: 'v1@e2e.test' }).lean()).vendorStatus, undefined, 'a dry run changes nothing');
-
-  const run = await ok('GET', '/run-kyb-migration?secret=migrate123');
-  assert.equal(run.applied, true);
-  assert.ok(run.vendorsUpdated >= 1);
-  const v1 = await User.findOne({ email: 'v1@e2e.test' });
-  assert.equal(v1.vendorStatus, 'APPROVED');
-  assert.equal(v1.role, 'vendor', 'role is untouched');
-
-  const again = await ok('GET', '/run-kyb-migration?secret=migrate123');
-  assert.equal(again.vendorsUpdated + again.buyersUpdated, 0, 'running it twice changes nothing');
-});
