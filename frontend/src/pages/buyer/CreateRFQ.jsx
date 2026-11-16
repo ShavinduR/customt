@@ -119,7 +119,7 @@ export default function CreateRFQ() {
   const [searchParams, setSearchParams] = useSearchParams();
   const draft = useMemo(loadDraft, []);
 
-  // ── Direct Quote (Phase 5): /buyer/rfqs/new?vendorId=… sends the RFQ to one vendor only. ──
+  // ── Direct Quote (Phase 5): /create-rfq?vendorId=… (or /buyer/rfqs/new?vendorId=…) sends the RFQ to one vendor only. ──
   const directVendorId = /^[a-f0-9]{24}$/i.test(searchParams.get('vendorId') || '') ? searchParams.get('vendorId') : null;
   const [directVendor, setDirectVendor] = useState(null);
   const [directVendorError, setDirectVendorError] = useState(null);

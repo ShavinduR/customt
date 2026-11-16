@@ -71,6 +71,8 @@ export default function App() {
                       <Route path="/buyer" element={<BuyerDashboard />} />
                       <Route path="/buyer/rfqs" element={<RFQList />} />
                       <Route path="/buyer/rfqs/new" element={<CreateRFQ />} />
+                      {/* Direct Quote entry point used by the feed and storefronts: /create-rfq?vendorId=… */}
+                      <Route path="/create-rfq" element={<CreateRFQ />} />
                       <Route path="/buyer/rfqs/:id" element={<RFQDetail />} />
                       <Route path="/buyer/orders" element={<OrdersList />} />
                       <Route path="/buyer/orders/:id" element={<OrderDetail />} />

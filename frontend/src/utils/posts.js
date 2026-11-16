@@ -11,7 +11,7 @@ export const POST_TYPE_META = {
   CLEARANCE: { label: 'Clearance Stock', short: 'Clearance', tone: 'amber', icon: Tags, blurb: 'Ready stock at a guide price, while it lasts.' },
 };
 
-/** Configurator link with optional Direct-RFQ vendor and prefilled garment details. */
+/** Configurator link (/create-rfq) with optional Direct-RFQ vendor and prefilled garment details. */
 export function configuratorLink({ vendorId, garmentType, fabric, gsm, quantity, postId } = {}) {
   const params = new URLSearchParams();
   if (vendorId) params.set('vendorId', vendorId);
@@ -21,7 +21,7 @@ export function configuratorLink({ vendorId, garmentType, fabric, gsm, quantity,
   if (quantity) params.set('qty', String(quantity));
   if (postId) params.set('post', postId);
   const query = params.toString();
-  return `/buyer/rfqs/new${query ? `?${query}` : ''}`;
+  return `/create-rfq${query ? `?${query}` : ''}`;
 }
 
 /**
