@@ -18,6 +18,7 @@ const signingKey = (user) => `${config.jwtSecret}:${user.passwordHash}`;
 
 function createResetToken(user) {
   return jwt.sign({ sub: String(user._id), purpose: PURPOSE }, signingKey(user), {
+    algorithm: 'HS256',
     expiresIn: `${config.passwordResetMinutes}m`,
   });
 }
@@ -98,7 +99,7 @@ async function userFromResetToken(token) {
   if (!user || !user.isActive) throw invalid();
 
   try {
-    jwt.verify(token, signingKey(user));
+    jwt.verify(token, signingKey(user), { algorithms: ['HS256'] });
   } catch (err) {
     if (err.name === 'TokenExpiredError') {
       throw ApiError.badRequest('This reset link has expired. Please request a new one.', { code: 'RESET_TOKEN_EXPIRED' });

@@ -1,5 +1,5 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box,
   CalendarClock,
@@ -15,10 +15,11 @@ import {
   Scissors,
   ShieldCheck,
   Shirt,
+  Store,
   Sparkles,
   Users,
 } from 'lucide-react';
-import { rfqApi } from '../../api/client';
+import { rfqApi, storefrontApi } from '../../api/client';
 import { useCatalog } from '../../context/CatalogContext';
 import { useToast } from '../../context/ToastContext';
 import useDebouncedValue from '../../hooks/useDebouncedValue';
@@ -115,12 +116,40 @@ export default function CreateRFQ() {
   const { catalog, loading: catalogLoading, error: catalogError, reload } = useCatalog();
   const toast = useToast();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const draft = useMemo(loadDraft, []);
+
+  // ── Direct Quote (Phase 5): /create-rfq?vendorId=… (or /buyer/rfqs/new?vendorId=…) sends the RFQ to one vendor only. ──
+  const directVendorId = /^[a-f0-9]{24}$/i.test(searchParams.get('vendorId') || '') ? searchParams.get('vendorId') : null;
+  const [directVendor, setDirectVendor] = useState(null);
+  const [directVendorError, setDirectVendorError] = useState(null);
+  useEffect(() => {
+    setDirectVendor(null);
+    setDirectVendorError(null);
+    if (!directVendorId) return undefined;
+    let cancelled = false;
+    storefrontApi
+      .get(directVendorId, { limit: 1 })
+      .then((res) => !cancelled && setDirectVendor(res.vendor))
+      .catch((err) => !cancelled && setDirectVendorError(err));
+    return () => {
+      cancelled = true;
+    };
+  }, [directVendorId]);
+  const openToAllVendors = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('vendorId');
+    setSearchParams(next, { replace: true });
+  };
+  const directName = directVendor?.companyName || directVendor?.name || 'this vendor';
 
   const [specs, setSpecs] = useState(draft?.specs || DEFAULT_SPECS);
   const [title, setTitle] = useState(draft?.title || '');
   const [description, setDescription] = useState(draft?.description || '');
   const [deliveryOverride, setDeliveryOverride] = useState(draft?.deliveryOverride || '');
+
+  // A feed post can prefill garment, fabric and GSM (?garment=&fabric=&gsm=), applied once on arrival.
+  const prefillApplied = useRef(false);
   const [view, setView] = useState('front');
   const [mode3d, setMode3d] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
@@ -177,7 +206,7 @@ export default function CreateRFQ() {
     }
     setPreviewLoading(true);
     rfqApi
-      .preview(debouncedSpecs)
+      .preview(debouncedSpecs, directVendorId)
       .then((res) => {
         if (!cancelled) {
           setPreview(res.preview);
@@ -190,7 +219,21 @@ export default function CreateRFQ() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSpecs, catalog, moq]);
+  }, [debouncedSpecs, catalog, moq, directVendorId]);
+
+  useEffect(() => {
+    if (prefillApplied.current || !catalog) return;
+    prefillApplied.current = true;
+    const patch = {};
+    const garment = searchParams.get('garment');
+    const fabric = searchParams.get('fabric');
+    const gsm = Number(searchParams.get('gsm'));
+    if (catalog.garmentTypes.includes(garment)) patch.garmentType = garment;
+    if (catalog.fabrics.includes(fabric)) patch.fabric = fabric;
+    if (catalog.gsmOptions.includes(gsm)) patch.gsm = gsm;
+    if (Object.keys(patch).length) setSpecs((s) => ({ ...s, ...patch }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalog]);
 
   const deliveryDays = deliveryOverride === '' ? minDays : Number(deliveryOverride);
   const validation = [];
@@ -199,7 +242,14 @@ export default function CreateRFQ() {
   if (!hasArtwork) validation.push('Add text or an image to at least one side.');
   if (emptyText) validation.push('One of your text layers is empty. Type something or delete it.');
   if (deliveryOverride !== '' && (!Number.isInteger(deliveryDays) || deliveryDays < minDays)) validation.push(`Delivery must be at least ${minDays} days for this specification.`);
-  if (preview && !preview.canLaunch) validation.push('No prequalified vendor can fulfil this order yet (PERA event lock).');
+  if (preview && !preview.canLaunch) {
+    validation.push(
+      preview.directVendor
+        ? `${directName} can't take this order: ${preview.directVendor.reasons.join('; ')}.`
+        : 'No prequalified vendor can fulfil this order yet (PERA event lock).'
+    );
+  }
+  if (directVendorId && directVendorError) validation.push('The vendor for this Direct Quote is not available. Open the request to all vendors instead.');
 
   const openConfirm = () => {
     setTouched(true);
@@ -218,6 +268,7 @@ export default function CreateRFQ() {
         description: description.trim(),
         expectedDeliveryDays: deliveryOverride === '' ? undefined : deliveryDays,
         designSpecs: specs,
+        ...(directVendorId ? { directVendorId } : {}),
       });
       clearDraft();
       toast.success(res.message, { title: 'Auction launched' });
@@ -244,8 +295,12 @@ export default function CreateRFQ() {
   return (
     <div>
       <PageHeader
-        title="Design & launch an RFQ"
-        subtitle="Configure your garment visually. We turn it into a technical specification and open a 24-hour reverse auction to prequalified printers."
+        title={directVendorId ? 'Request a Direct Quote' : 'Design & launch an RFQ'}
+        subtitle={
+          directVendorId
+            ? `Configure your garment visually. Only ${directName} will see this request and quote for it.`
+            : 'Configure your garment visually. We turn it into a technical specification and open a 24-hour reverse auction to prequalified printers.'
+        }
         actions={
           <Button
             variant="ghost"
@@ -263,6 +318,25 @@ export default function CreateRFQ() {
           </Button>
         }
       />
+
+      {directVendorId && (
+        <Alert tone={directVendorError ? 'danger' : 'info'} icon={Store} title={directVendorError ? 'This vendor is not available' : `Direct Quote to ${directName}`} className="mb-6">
+          {directVendorError ? (
+            <>{directVendorError.message}. </>
+          ) : (
+            <>
+              Only{' '}
+              <Link to={`/vendors/${directVendorId}`} className="font-semibold underline">
+                {directName}
+              </Link>{' '}
+              sees this request{directVendor?.capabilities?.length ? ` (prints: ${directVendor.capabilities.join(', ')}; up to ${directVendor.maxCapacity} pcs)` : ''}. Their quote is paid into CustomT escrow, 30% is released when production starts and the rest only after you inspect the goods with your O2O PIN.{' '}
+            </>
+          )}
+          <button type="button" onClick={openToAllVendors} className="font-semibold underline">
+            Open to all vendors instead
+          </button>
+        </Alert>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
         {/* ── Live preview ── */}
@@ -336,7 +410,27 @@ export default function CreateRFQ() {
               {previewLoading ? (
                 <Spinner label="Checking vendor eligibility…" className="justify-start" />
               ) : preview ? (
-                preview.canLaunch ? (
+                preview.directVendor ? (
+                  preview.canLaunch ? (
+                    <p className="flex items-center gap-2 text-sm text-emerald-700">
+                      <Store className="h-4 w-4" />
+                      <span>
+                        <strong>{directName}</strong> can take this order and will be notified instantly
+                      </span>
+                    </p>
+                  ) : (
+                    <div className="text-sm text-red-700">
+                      <p className="flex items-center gap-2 font-medium">
+                        <ShieldCheck className="h-4 w-4" /> {directName} can't take this order as configured:
+                      </p>
+                      <ul className="mt-1 list-disc pl-10">
+                        {preview.directVendor.reasons.map((r) => (
+                          <li key={r}>{r}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )
+                ) : preview.canLaunch ? (
                   <p className="flex items-center gap-2 text-sm text-emerald-700">
                     <Users className="h-4 w-4" />
                     <span>
@@ -470,7 +564,7 @@ export default function CreateRFQ() {
               )}
 
               <Button size="lg" className="w-full" icon={Rocket} onClick={openConfirm}>
-                Launch 24-hour reverse auction
+                {directVendorId ? `Send Direct Quote request to ${directName}` : 'Launch 24-hour reverse auction'}
               </Button>
             </div>
           </Section>
@@ -480,7 +574,7 @@ export default function CreateRFQ() {
       <Modal
         open={confirmOpen}
         onClose={() => !submitting && setConfirmOpen(false)}
-        title="Launch this auction?"
+        title={directVendorId ? `Send this request to ${directName}?` : 'Launch this auction?'}
         subtitle={title}
         dismissible={!submitting}
         footer={
@@ -489,7 +583,7 @@ export default function CreateRFQ() {
               Keep editing
             </Button>
             <Button icon={Rocket} loading={submitting} onClick={launch}>
-              Launch auction
+              {directVendorId ? 'Send request' : 'Launch auction'}
             </Button>
           </>
         }
@@ -507,7 +601,9 @@ export default function CreateRFQ() {
                 {specs.printType} · {sidesPrinted.map((side) => SIDE_LABEL[side]).join(', ')}
               </li>
               <li>Delivery within {deliveryDays} days</li>
-              {preview && <li>{preview.eligibleVendorCount} prequalified vendor(s) will be notified instantly</li>}
+              {preview && (
+                <li>{preview.directVendor ? `Only ${directName} will be notified and can quote` : `${preview.eligibleVendorCount} prequalified vendor(s) will be notified instantly`}</li>
+              )}
             </ul>
           </div>
           <Alert tone="info" icon={Lock} title="Your design will be locked">

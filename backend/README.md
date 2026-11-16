@@ -121,13 +121,13 @@ Every response is `{ success, ... }`. Errors look like `{ success:false, message
 |---|---|---|
 | GET | `/api/health` | DB status |
 | GET | `/api/meta/catalog` | all configurator options, weights, statuses, test cards |
-| POST | `/api/uploads/logo` | multipart field `logo` (png/jpg/webp/svg, 2 MB) → `{url}` to use as `designSpecs.logoUrl` |
+| POST | `/api/uploads/logo` | multipart field `logo` (png/jpg/webp/svg, 2 MB) → `{url}`: design images (buyer), post photos and storefront covers (vendor) |
 
 ### RFQs and bids: `/api/rfqs`
 | Method | Path | Body / Notes | Role |
 |---|---|---|---|
-| POST | `/preview` | `designSpecs` → totalQuantity, expectedDeliveryDays, eligibleVendorCount | buyer |
-| POST | `/` | `{title, description?, expectedDeliveryDays?, designSpecs:{garmentType, fabric, gsm, color, printType, printPlacement?, customText?, backText?, textColor?, logoUrl?, designPosition?, sizeBreakdown:{S,M,L,XL,XXL}}}` | buyer |
+| POST | `/preview` | `{designSpecs, directVendorId?}` → totalQuantity, expectedDeliveryDays, eligibleVendorCount (+ `directVendor` eligibility for a Direct RFQ) | buyer |
+| POST | `/` | `{title, description?, expectedDeliveryDays?, directVendorId?, designSpecs:{garmentType, fabric, gsm, color, printType, printPlacement?, customText?, backText?, textColor?, logoUrl?, designPosition?, sizeBreakdown:{S,M,L,XL,XXL}}}` | buyer |
 | GET | `/` | `?status=OPEN,CLOSED&search=&page=&limit=` (buyer: own RFQs; vendor: RFQs they bid on; admin: all) | any |
 | GET | `/:id` | buyer/admin: `{rfq, leaderboard[], priceDiagnostic}`; vendor: `{rfq, myBid, rank, totalBids, rankLabel}` | any |
 | PUT/PATCH | `/:id` | always **423 CPAPO_SPEC_LOCK** | buyer |
@@ -141,6 +141,18 @@ Every response is `{ success, ... }`. Errors look like `{ success:false, message
 | GET `/rfqs` | live feed of eligible OPEN RFQs, each with own rank |
 | GET `/bids` | own bid history with rank and outcome |
 | GET `/wallet` | balance, amount pending in escrow, payout ledger |
+| PATCH `/storefront` | `{coverUrl?, bio?}`: storefront header (bio is contact-filtered) |
+
+### Global Feed and storefronts (Phase 5): `/api/posts`, `/api/vendors`
+| Method | Path | Body / Notes | Role |
+|---|---|---|---|
+| GET | `/api/posts` | `?type=PREMIUM_CATALOG\|INSPIRATION\|CLEARANCE&cursor=&limit=` → `{items[], nextCursor}`: newest posts from prequalified vendors (infinite scroll: repeat with `nextCursor` until it is `null`) | any |
+| GET | `/api/posts/:id` | one post | any |
+| POST | `/api/posts` | `{postType, title, postDescription?, images[1-6], garmentType?, printTypes?, sizeChart?[{size, chestCm, lengthCm, sleeveCm?}], fabricSpecs?{fabric, gsm, composition?}, clearance?{availableQuantity, unitPrice}}`. **PREMIUM_CATALOG requires `sizeChart` + `fabricSpecs` + `garmentType`; CLEARANCE requires `clearance` + `garmentType`.** Contact details in the text become `[CONTACT BLOCKED]` before saving; the response lists them in `blocked`. 20 posts / 24 h | prequalified vendor |
+| DELETE | `/api/posts/:id` | archive (own post; admins: any) | vendor, admin |
+| GET | `/api/vendors/:id/storefront` | `?type=&cursor=&limit=` → `{vendor, tabs:{PREMIUM_CATALOG, INSPIRATION, CLEARANCE}, tab, items[], nextCursor, canRequestDirectQuote}`. No phone/e-mail | any |
+
+**Direct RFQ.** `POST /api/rfqs` with `directVendorId` creates an auction only that vendor can see and bid on (`isDirect: true`). The vendor must pass every PERA lock for the design (otherwise **422 PERA_DIRECT_VENDOR_LOCK**), and other vendors get **403 DIRECT_RFQ_OTHER_VENDOR**. Accepting the bid creates a normal order, so payment still goes through escrow, the 30%/70% milestones and O2O verification.
 
 ### Orders: `/api/orders`
 | Method | Path | Body | Role |

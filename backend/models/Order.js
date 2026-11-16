@@ -132,13 +132,21 @@ const orderSchema = new mongoose.Schema(
       review: { type: String, trim: true, maxlength: 1000 },
       trustBefore: Number,
       trustAfter: Number,
+      countedInTrust: { type: Boolean, default: true },
       ratedAt: Date,
     },
 
     completedAt: { type: Date },
     cancelledAt: { type: Date },
   },
-  { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+    // Every save checks the document version, so two concurrent requests (or two server instances)
+    // can never both move the same order out of a state; the loser gets a VersionError (HTTP 409).
+    optimisticConcurrency: true,
+  }
 );
 
 orderSchema.index({ 'dispute.isOpen': 1 });

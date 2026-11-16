@@ -67,6 +67,7 @@ const AUCTION = Object.freeze({
   PRICE_CV_MIN_BIDS: 3,
   MAX_LEAD_TIME_DAYS: 120,
   MAX_NOTES_LENGTH: 500,
+  MIN_LEAD_TIME_RATIO: 0.5, // bids must quote at least half of the platform's realistic production estimate
 });
 
 const RFQ_STATUS = Object.freeze({
@@ -132,6 +133,8 @@ const TRUST = Object.freeze({
   MAX: 5,
   EWMA_OLD_WEIGHT: 0.7,
   EWMA_NEW_WEIGHT: 0.3,
+  // Anti-collusion: only one rating per buyer-vendor pair in this window changes the trust score.
+  PAIR_RATING_WINDOW_DAYS: 30,
 });
 
 const DISPUTE_CATEGORIES = Object.freeze({
@@ -151,6 +154,30 @@ const DISPUTE_RESOLUTIONS = Object.freeze({
   REFUND_BUYER: 'REFUND_BUYER',
   SPLIT: 'SPLIT',
   RESUME_PRODUCTION: 'RESUME_PRODUCTION', // e.g. vendor agrees to reprint
+});
+
+/** Phase 5: vendor posts (Global Feed) and micro-storefronts. */
+const POST_TYPES = Object.freeze({
+  PREMIUM_CATALOG: 'PREMIUM_CATALOG',
+  INSPIRATION: 'INSPIRATION',
+  CLEARANCE: 'CLEARANCE',
+});
+
+const POSTS = Object.freeze({
+  TYPES: Object.values(POST_TYPES),
+  TITLE_MIN: 3,
+  TITLE_MAX: 100,
+  DESCRIPTION_MAX: 1000,
+  COMPOSITION_MAX: 120,
+  MIN_IMAGES: 1,
+  MAX_IMAGES: 6,
+  DAILY_LIMIT: 20, // posts per vendor per rolling 24 hours (anti-spam)
+  FEED_PAGE_SIZE: 12,
+  FEED_MAX_PAGE_SIZE: 30,
+  // Garment measurements in centimetres (flat chest width x 2, body length, sleeve length).
+  SIZE_CHART_RANGES: { chestCm: [60, 180], lengthCm: [50, 110], sleeveCm: [10, 80] },
+  CLEARANCE_MAX_QUANTITY: 100000,
+  BIO_MAX: 500,
 });
 
 module.exports = {
@@ -177,4 +204,6 @@ module.exports = {
   DISPUTE_CATEGORIES,
   DISPUTE_DESIRED_RESOLUTIONS,
   DISPUTE_RESOLUTIONS,
+  POST_TYPES,
+  POSTS,
 };

@@ -26,6 +26,8 @@ const vendorRoutes = require('./routes/vendorRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const metaRoutes = require('./routes/metaRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
+const postRoutes = require('./routes/postRoutes');
+const storefrontRoutes = require('./routes/storefrontRoutes');
 
 function corsOrigin(origin, callback) {
   // Allow same-origin / server-to-server requests (no Origin header) and configured frontends.
@@ -78,6 +80,8 @@ function createApp() {
   app.use('/api/vendor', vendorRoutes);
   app.use('/api/admin', adminRoutes);
   app.use('/api/uploads', uploadRoutes);
+  app.use('/api/posts', postRoutes);
+  app.use('/api/vendors', storefrontRoutes);
 
   app.use(notFound);
   app.use(errorHandler);

@@ -70,10 +70,18 @@ const RULES = [
  * A digit run is a phone (or account) number when it has 10-15 digits, or 9 digits starting with 7
  * (a Sri Lankan mobile written without its leading 0). Separators between digits are allowed.
  */
-const PHONE_CANDIDATE = /\+?\d(?:[\s\-().]{0,3}\d){6,}/g;
+const DIGIT_WORDS = { zero: '0', oh: '0', o: '0', one: '1', two: '2', three: '3', four: '4', five: '5', six: '6', seven: '7', eight: '8', nine: '9' };
+const DIGIT_TOKEN = '(?:\\d|zero|oh|one|two|three|four|five|six|seven|eight|nine)';
+// Digits and spelled-out digits may be mixed ("zero 7 seven 1 ..."), separated by spaces or punctuation.
+const PHONE_CANDIDATE = new RegExp(`\\+?${DIGIT_TOKEN}(?:[\\s\\-().]{0,3}${DIGIT_TOKEN}){6,}`, 'gi');
+const toDigits = (match) =>
+  match
+    .toLowerCase()
+    .replace(/[a-z]+/g, (word) => DIGIT_WORDS[word] ?? '')
+    .replace(/\D/g, '');
 function maskPhones(text, flags) {
   return text.replace(PHONE_CANDIDATE, (match) => {
-    const digits = match.replace(/\D/g, '');
+    const digits = toDigits(match);
     const isPhone = (digits.length >= 10 && digits.length <= 15) || (digits.length === 9 && digits.startsWith('7'));
     if (!isPhone) return match;
     flags.add('phone');
@@ -82,11 +90,23 @@ function maskPhones(text, flags) {
 }
 
 /**
+ * Undoes common disguises before matching: full-width / styled characters ("０７７", "ｗｈａｔｓａｐｐ") are
+ * folded to plain ASCII (NFKC), invisible characters (zero-width spaces, soft hyphens, joiners) are
+ * removed, and keycap emoji ("7️⃣") become plain digits.
+ */
+function normalise(input) {
+  return String(input ?? '')
+    .normalize('NFKC')
+    .replace(/([0-9#*])\uFE0F?\u20E3/g, '$1')
+    .replace(/[\u00AD\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\uFEFF\uFE0E\uFE0F]/g, '');
+}
+
+/**
  * @param {string} input raw message text
  * @returns {{ text: string, flagged: boolean, flags: string[] }}
  */
 function filterContactInfo(input) {
-  let text = String(input ?? '');
+  let text = normalise(input);
   const flags = new Set();
 
   RULES.forEach((rule) => {
@@ -107,4 +127,14 @@ function filterContactInfo(input) {
   return { text, flagged: flags.size > 0, flags: [...flags] };
 }
 
-module.exports = { filterContactInfo, BLOCK };
+/** Masks contact details in free text a counterpart will read (bid notes, RFQ descriptions, notes...). */
+function maskContactInfo(input) {
+  return filterContactInfo(input).text;
+}
+
+/** True when free text contains contact details (used to reject names that smuggle them). */
+function containsContactInfo(input) {
+  return filterContactInfo(input).flagged;
+}
+
+module.exports = { filterContactInfo, maskContactInfo, containsContactInfo, normalise, BLOCK };

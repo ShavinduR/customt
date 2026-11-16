@@ -107,6 +107,9 @@ const rfqSchema = new mongoose.Schema(
     bidCount: { type: Number, default: 0 },
     priceDiagnostic: { type: priceDiagnosticSchema, default: () => ({}) },
 
+    // Direct RFQ (Phase 5): only this vendor may see and bid. null = open reverse auction.
+    directVendorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true, immutable: true },
+
     awardedBidId: { type: mongoose.Schema.Types.ObjectId, ref: 'Bid' },
     awardedVendorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     orderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Order' },

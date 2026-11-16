@@ -5,14 +5,18 @@ const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const { ROLES } = require('../config/constants');
 
+const JWT_ALGORITHM = 'HS256';
+
 function signToken(user) {
   return jwt.sign({ sub: String(user._id), role: user.role }, config.jwtSecret, {
+    algorithm: JWT_ALGORITHM,
     expiresIn: config.jwtExpiresIn,
   });
 }
 
 function verifyToken(token) {
-  return jwt.verify(token, config.jwtSecret);
+  // Pin the algorithm so a token can never pick a weaker one (e.g. "none" or an asymmetric-key confusion).
+  return jwt.verify(token, config.jwtSecret, { algorithms: [JWT_ALGORITHM] });
 }
 
 function extractBearer(header = '') {
@@ -36,11 +40,11 @@ async function resolveUserFromToken(token) {
     throw ApiError.unauthorized('Your password was changed. Please log in again.', { code: 'PASSWORD_CHANGED' });
   }
   if (!user.isActive) throw ApiError.forbidden('Your account has been suspended. Please contact support.', { code: 'ACCOUNT_SUSPENDED' });
-  return user;
+  return { user, issuedAt: payload.iat };
 }
 
 const protect = asyncHandler(async (req, _res, next) => {
-  req.user = await resolveUserFromToken(extractBearer(req.headers.authorization));
+  ({ user: req.user } = await resolveUserFromToken(extractBearer(req.headers.authorization)));
   next();
 });
 
@@ -73,6 +77,7 @@ module.exports = {
   verifyToken,
   extractBearer,
   resolveUserFromToken,
+  JWT_ALGORITHM,
   protect,
   authorize,
   requirePrequalifiedVendor,

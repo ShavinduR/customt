@@ -15,6 +15,9 @@ function toErrorResponse(err) {
     const details = Object.values(err.errors).map((e) => e.message);
     return { status: 400, message: 'Validation failed', code: 'VALIDATION_ERROR', details };
   }
+  if (err instanceof mongoose.Error.VersionError) {
+    return { status: 409, message: 'This record was changed by another request. Please refresh and try again.', code: 'CONCURRENT_UPDATE' };
+  }
   if (err instanceof mongoose.Error.CastError) {
     return { status: 400, message: `Invalid value for ${err.path}`, code: 'INVALID_ID' };
   }

@@ -27,17 +27,26 @@ src/
 │   ├── ui/                     # Button, Card, Modal, Badge, StatusBadge, TrustStars, Countdown, form controls…
 │   ├── layout/                 # AppLayout (nav, live indicator, bell, user menu), ProtectedRoute
 │   ├── configurator/           # TShirtPreview (layered SVG, 4 views), ArtworkEditor, Shirt3DViewer (three.js), SizeMatrix, OptionCard
+│   ├── feed/                   # PostCard (gallery, size chart, type-based call to action), PostComposer (vendor)
 │   ├── auction/                # Leaderboard + ScoreBar, PriceDiagnosticAlert, SpecSummary
 │   └── orders/                 # OrderProgress, EscrowBreakdown, PaymentModal, O2OPanel, DisputeModal, DisputeThread, RatingModal
 └── pages/
     ├── Landing, Account, NotFound
     ├── auth/                   # Login (demo quick-fill), Register (buyer / vendor PERA fields)
+    ├── feed/                   # GlobalFeed (infinite scroll), VendorStorefront (micro-storefront, Direct Quote)
     ├── buyer/                  # Dashboard, CreateRFQ (configurator), RFQList, RFQDetail (live auction), OrdersList, OrderDetail
     ├── vendor/                 # VendorDashboard, RFQFeed (live), AuctionRoom (rank-only), MyBids, VendorOrders, VendorOrderDetail, Wallet
     └── admin/                  # AdminOverview, VendorVerification, LiveAuctions, Disputes, AdminOrders, AdminOrderDetail, Analytics, UsersAdmin
 ```
 
 ## Buyer flow
+
+0. **Discover** (`/feed`, the buyer home): an infinite-scroll feed of posts from verified vendors, filterable by Premium Catalog, Inspiration and Clearance. Each card's button depends on the post type:
+   - Premium Catalog: **Get a direct quote**, which opens the configurator for that vendor with the garment, fabric and GSM prefilled.
+   - Clearance: **Request this stock**, a Direct Quote to that vendor.
+   - Inspiration: **Design something similar**, an open auction with the garment prefilled.
+
+   Clicking a vendor opens their storefront (`/vendors/:id`): cover photo, trust score, badges, three post tabs and **Request Direct Quote** (`/buyer/rfqs/new?vendorId=…`). A Direct Quote is seen and quoted only by that vendor, and is still paid through escrow and released with the O2O PIN.
 
 1. **Design & Launch** (`/buyer/rfqs/new`): pick garment, fabric, GSM, colour and print method. Design the Front, Back, Left sleeve and Right sleeve: add several text layers (font, size, colour) and images per side, drag them on the live preview, and open **View in 3D** to rotate, zoom and pan a 3D model wearing the design, and fill the S–XXL matrix (MOQ 20). Delivery days are estimated instantly. The eligible-vendor count (PERA event lock) is checked live against the server. The draft is saved in the browser.
 2. **Live auction** (`/buyer/rfqs/:id`): joins the `rfq_<id>` room. Shows the full ranked leaderboard with score breakdown bars, soft-close countdown and extension notices, and the price-variance warning. Accept any bid, or cancel the RFQ.
@@ -49,6 +58,8 @@ src/
    - Rate the vendor, which updates their trust score.
 
 ## Vendor flow
+
+Vendors open **Storefront** in the menu to publish posts (**New post**) and edit the cover photo and bio. Premium Catalog posts require a size chart and fabric specs. Contact details in post text are removed by the server. Direct Quote requests appear in **Live RFQs** marked *Direct quote for you*.
 
 All `/vendor` pages sit inside `VendorStatusLayout`, which loads the PERA qualification status and refreshes it live when an admin verifies the vendor. `PeraGate` replaces the auction pages with a lock screen until the vendor is prequalified.
 

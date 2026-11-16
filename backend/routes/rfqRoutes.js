@@ -20,7 +20,8 @@ router.post(
   '/preview',
   authorize(ROLES.BUYER),
   asyncHandler(async (req, res) => {
-    res.json({ success: true, preview: await auctionService.previewRfq(req.body.designSpecs || req.body) });
+    const preview = await auctionService.previewRfq(req.body.designSpecs || req.body, { directVendorId: req.body.directVendorId, buyer: req.user });
+    res.json({ success: true, preview });
   })
 );
 

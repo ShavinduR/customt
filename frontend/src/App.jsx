@@ -36,6 +36,8 @@ import AdminOrderDetail from './pages/admin/AdminOrderDetail';
 import Analytics from './pages/admin/Analytics';
 import UsersAdmin from './pages/admin/UsersAdmin';
 import Conversations from './pages/admin/Conversations';
+import GlobalFeed from './pages/feed/GlobalFeed';
+import VendorStorefront from './pages/feed/VendorStorefront';
 
 function HomeRoute() {
   const { user, initialising } = useAuth();
@@ -62,11 +64,15 @@ export default function App() {
                 <Route element={<ProtectedRoute />}>
                   <Route element={<AppLayout />}>
                     <Route path="/account" element={<Account />} />
+                    <Route path="/feed" element={<GlobalFeed />} />
+                    <Route path="/vendors/:id" element={<VendorStorefront />} />
 
                     <Route element={<ProtectedRoute roles={['buyer']} />}>
                       <Route path="/buyer" element={<BuyerDashboard />} />
                       <Route path="/buyer/rfqs" element={<RFQList />} />
                       <Route path="/buyer/rfqs/new" element={<CreateRFQ />} />
+                      {/* Direct Quote entry point used by the feed and storefronts: /create-rfq?vendorId=… */}
+                      <Route path="/create-rfq" element={<CreateRFQ />} />
                       <Route path="/buyer/rfqs/:id" element={<RFQDetail />} />
                       <Route path="/buyer/orders" element={<OrdersList />} />
                       <Route path="/buyer/orders/:id" element={<OrderDetail />} />
