@@ -824,7 +824,7 @@ test('KYB: buyer-only sign-up, private document upload, admin review with change
   // Draft: validation, NIC never stored in full.
   const bad = await api('PUT', '/kyb/application', token, { business: { legalName: 'Call 0771234567 Prints' }, owner: { nic: '12345' } });
   assert.equal(bad.status, 400);
-  assert.ok(bad.body.details.some((d) => /contact/.test(d)) && bad.body.details.some((d) => /NIC must be/.test(d)), JSON.stringify(bad.body));
+  assert.ok(bad.body.details.some((d) => /phone numbers/.test(d)) && bad.body.details.some((d) => /NIC must be/.test(d)), JSON.stringify(bad.body));
   const business = {
     legalName: 'Nuwan Garments (Pvt) Ltd',
     businessRegNo: 'PV 99881'.replace(' ', ''),
