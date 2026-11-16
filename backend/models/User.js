@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
-const { ROLES, PRINT_TYPES, SKILL_BADGES, TRUST } = require('../config/constants');
+const { ROLES, PRINT_TYPES, SKILL_BADGES, TRUST, POSTS } = require('../config/constants');
+const { isUploadedFileUrl } = require('../utils/uploadUrl');
 
 const isVendor = function isVendor() {
   return this.role === ROLES.VENDOR;
@@ -66,6 +67,17 @@ const userSchema = new mongoose.Schema(
     verifiedAt: { type: Date },
     verifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     verificationNotes: { type: String, trim: true, maxlength: 500 },
+
+    // ── Micro-storefront (Phase 5). The bio is contact-filtered by the route before it is saved.
+    storefront: {
+      coverUrl: {
+        type: String,
+        trim: true,
+        default: '',
+        validate: { validator: (v) => !v || isUploadedFileUrl(v), message: 'The cover photo must be an image uploaded to CustomT' },
+      },
+      bio: { type: String, trim: true, maxlength: POSTS.BIO_MAX, default: '' },
+    },
 
     // ── Virtual wallets (escrow payouts for vendors / refunds for buyers) ──
     walletBalance: { type: Number, default: 0, min: 0 },

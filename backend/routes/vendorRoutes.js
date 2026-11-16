@@ -5,6 +5,7 @@ const { protect, authorize, requirePrequalifiedVendor } = require('../middleware
 const { ROLES, RFQ_STATUS, ORDER_STATUS } = require('../config/constants');
 const { parsePagination } = require('../utils/helpers');
 const auctionService = require('../services/auctionService');
+const feedService = require('../services/feedService');
 
 const router = express.Router();
 router.use(protect, authorize(ROLES.VENDOR));
@@ -42,6 +43,8 @@ router.get(
       expiresAt: { $gt: new Date() },
       'designSpecs.printType': { $in: req.user.capabilities },
       'designSpecs.totalQuantity': { $lte: req.user.maxCapacity },
+      // Open auctions, plus Direct RFQs addressed to this vendor (never another vendor's).
+      directVendorId: { $in: [null, req.user._id] },
     };
     if (req.query.printType) filter['designSpecs.printType'] = { $in: [String(req.query.printType)].filter((p) => req.user.capabilities.includes(p)) };
 
@@ -106,6 +109,19 @@ router.get(
       walletBalance: req.user.walletBalance,
       pendingInEscrow,
       transactions,
+    });
+  })
+);
+
+/** PATCH /api/vendor/storefront { coverUrl?, bio? } - storefront header (bio is contact-filtered). */
+router.patch(
+  '/storefront',
+  asyncHandler(async (req, res) => {
+    const result = await feedService.updateStorefront(req.user, req.body);
+    res.json({
+      success: true,
+      message: result.blocked.length ? 'Storefront updated. Contact details were removed from your bio.' : 'Storefront updated.',
+      ...result,
     });
   })
 );

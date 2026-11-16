@@ -38,7 +38,7 @@ Object.assign(process.env, {
 const { io: ioClient } = require('socket.io-client');
 const { start } = require('../../server');
 const { disconnectDB } = require('../../config/db');
-const { User, RFQ, Bid, Order, Message } = require('../../models');
+const { User, RFQ, Bid, Order, Message, Post } = require('../../models');
 const { closeExpiredAuctions, stopAuctionScheduler } = require('../../services/auctionService');
 const { getLastTestMessage } = require('../../services/mailer');
 
@@ -152,7 +152,7 @@ test.before(async () => {
   runtime = await start();
   if (!runtime.server.listening) await new Promise((r) => runtime.server.once('listening', r));
   BASE = `http://127.0.0.1:${runtime.server.address().port}`;
-  await Promise.all([User, RFQ, Bid, Order, Message].map((m) => m.deleteMany({})));
+  await Promise.all([User, RFQ, Bid, Order, Message, Post].map((m) => m.deleteMany({})));
 });
 
 test.after(async () => {
@@ -662,4 +662,115 @@ test('security: contact details are masked outside chat, self-dealing and imposs
   // O2O PINs are stored encrypted.
   const stored = await Order.findOne({ o2oPin: { $exists: true } }).select('+o2oPin').lean();
   if (stored) assert.ok(!/^\d{6}$/.test(stored.o2oPin), 'O2O PIN is not stored in plain text');
+});
+
+// ── 21. Phase 5: Global Feed, micro-storefronts and Direct RFQs ──────────────────────────
+test('phase 5: vendor posts are filtered and validated, the feed paginates, Direct RFQs stay exclusive and use escrow', async () => {
+  const IMG = '/uploads/logos/0123456789abcdef01234567-1731480000000-a1b2c3d4.jpg';
+  const buyer = (await ok('POST', '/auth/register', null, { role: 'buyer', name: 'Feed Buyer', email: 'feed@e2e.test', password: 'Buyer1234', phone: '+94775550000' })).token;
+  const premium = {
+    postType: 'PREMIUM_CATALOG',
+    title: 'Heavyweight crew neck',
+    postDescription: 'Pre-shrunk 220 GSM. WhatsApp me on 077 123 4567 or email alpha@prints.lk for bulk deals',
+    images: [IMG],
+    garmentType: 'Crew Neck',
+    printTypes: ['Screen Printing'],
+    sizeChart: [{ size: 'M', chestCm: 104, lengthCm: 72 }, { size: 'L', chestCm: 110, lengthCm: 74 }],
+    fabricSpecs: { fabric: '100% Cotton', gsm: 220 },
+  };
+
+  // Publishing rules.
+  assert.equal((await api('POST', '/posts', buyer, premium)).status, 403, 'buyers cannot post');
+  const pendingVendor = await registerVendor('Echo', 'v5@e2e.test', ['DTF'], 200);
+  const unverified = await api('POST', '/posts', pendingVendor.token, premium);
+  assert.equal(unverified.status, 403);
+  assert.equal(unverified.body.code, 'PERA_QUALIFICATION_LOCK', 'unverified vendors cannot post');
+
+  const noChart = await api('POST', '/posts', S.v1.token, { ...premium, sizeChart: [], fabricSpecs: undefined });
+  assert.equal(noChart.status, 400);
+  assert.ok(noChart.body.details.some((d) => /size chart/.test(d)) && noChart.body.details.some((d) => /fabric specs/.test(d)), JSON.stringify(noChart.body));
+
+  const created = await ok('POST', '/posts', S.v1.token, premium);
+  assert.ok(created.post.postDescription.includes('[CONTACT BLOCKED]'));
+  assert.ok(!/4567|whatsapp|@/i.test(created.post.postDescription), created.post.postDescription);
+  assert.ok(created.blocked.includes('phone') && created.blocked.includes('email'));
+  const stored = await Post.findById(created.post._id).lean();
+  assert.ok(!/4567|@/.test(stored.postDescription), 'the unfiltered text never reaches MongoDB');
+
+  for (const title of ['Idea one', 'Idea two', 'Idea three']) {
+    await ok('POST', '/posts', S.v2.token, { postType: 'INSPIRATION', title, images: [IMG] });
+  }
+  await ok('POST', '/posts', S.v4.token, { postType: 'CLEARANCE', title: 'Navy polos', images: [IMG], garmentType: 'Polo', clearance: { availableQuantity: 80, unitPrice: 600 } });
+
+  // Global Feed: newest first, cursor pagination without duplicates, no vendor contact details.
+  const seen = [];
+  let cursor = null;
+  do {
+    const page = await ok('GET', `/posts?limit=2${cursor ? `&cursor=${cursor}` : ''}`, buyer);
+    assert.ok(page.items.length <= 2);
+    seen.push(...page.items);
+    cursor = page.nextCursor;
+  } while (cursor);
+  assert.equal(seen.length, 5);
+  assert.equal(new Set(seen.map((p) => p._id)).size, 5, 'no post appears twice across pages');
+  assert.equal(seen[0].title, 'Navy polos', 'newest first');
+  for (const p of seen) {
+    assert.equal(p.vendor.phone, undefined);
+    assert.equal(p.vendor.email, undefined);
+    assert.equal(p.contactFlags, undefined, 'moderation flags are not shown to buyers');
+  }
+  const onlyClearance = await ok('GET', '/posts?type=CLEARANCE', buyer);
+  assert.deepEqual(onlyClearance.items.map((p) => p.postType), ['CLEARANCE']);
+  assert.equal((await api('GET', '/posts?cursor=garbage', buyer)).status, 400);
+
+  // Micro-storefront.
+  const store = await ok('GET', `/vendors/${S.v1.id}/storefront`, buyer);
+  assert.equal(store.vendor.companyName, 'Alpha Prints');
+  assert.equal(store.vendor.phone, undefined);
+  assert.equal(store.tabs.PREMIUM_CATALOG, 1);
+  assert.equal(store.tab, 'PREMIUM_CATALOG');
+  assert.equal(store.items[0].sizeChart.length, 2);
+  assert.equal(store.canRequestDirectQuote, true);
+  assert.equal((await api('GET', `/vendors/${pendingVendor.id}/storefront`, buyer)).status, 404, 'unverified vendors have no public storefront');
+
+  const bio = await ok('PATCH', '/vendor/storefront', S.v1.token, { bio: 'Family printers since 1998. Call 0771234567', coverUrl: IMG });
+  assert.ok(bio.storefront.bio.includes('[CONTACT BLOCKED]'));
+
+  // Direct RFQ: exclusive to Alpha, refused for a vendor without the capability.
+  const wrongVendor = await api('POST', '/rfqs', buyer, { title: 'Direct to Charlie', designSpecs: SPECS, directVendorId: S.v3.id });
+  assert.equal(wrongVendor.status, 422);
+  assert.equal(wrongVendor.body.code, 'PERA_DIRECT_VENDOR_LOCK');
+
+  const preview = await ok('POST', '/rfqs/preview', buyer, { designSpecs: SPECS, directVendorId: S.v1.id });
+  assert.equal(preview.preview.directVendor.eligible, true);
+  assert.equal(preview.preview.eligibleVendorCount, 1);
+
+  const direct = (await ok('POST', '/rfqs', buyer, { title: 'Direct quote: crew necks', designSpecs: SPECS, directVendorId: S.v1.id })).rfq;
+  assert.equal(String(direct.directVendorId), S.v1.id);
+
+  const deltaFeed = await ok('GET', '/vendor/rfqs', S.v4.token);
+  assert.ok(!deltaFeed.items.some((r) => r._id === direct._id), "another vendor's feed never lists a Direct RFQ");
+  const peek = await api('GET', `/rfqs/${direct._id}`, S.v4.token);
+  assert.equal(peek.status, 403);
+  assert.equal(peek.body.code, 'DIRECT_RFQ_OTHER_VENDOR');
+  const intrude = await api('POST', `/rfqs/${direct._id}/bids`, S.v4.token, { price: 40000, leadTimeDays: 8 });
+  assert.equal(intrude.status, 403);
+  assert.equal(intrude.body.code, 'DIRECT_RFQ_OTHER_VENDOR');
+
+  const alphaFeed = await ok('GET', '/vendor/rfqs', S.v1.token);
+  assert.ok(alphaFeed.items.some((r) => r._id === direct._id && r.isDirect), 'the chosen vendor sees it, marked as direct');
+
+  // The Direct RFQ ends in the normal escrow flow.
+  const bid = await ok('POST', `/rfqs/${direct._id}/bids`, S.v1.token, { price: 60000, leadTimeDays: 8 });
+  const order = (await ok('POST', `/rfqs/${direct._id}/bids/${bid.myBid.bidId}/accept`, buyer)).order;
+  assert.equal(order.orderStatus, 'PENDING_ESCROW');
+  const paid = (await ok('POST', `/orders/${order._id}/pay`, buyer, CARD_OK)).order;
+  assert.equal(paid.escrowStatus, 'ESCROW_LOCKED');
+  assert.equal(paid.escrowHeld, 60000);
+
+  // Archiving removes a post from the feed; only its owner (or an admin) can do it.
+  assert.equal((await api('DELETE', `/posts/${created.post._id}`, S.v2.token)).status, 403);
+  await ok('DELETE', `/posts/${created.post._id}`, S.v1.token);
+  const after = await ok('GET', '/posts?type=PREMIUM_CATALOG', buyer);
+  assert.ok(!after.items.some((p) => p._id === created.post._id));
 });

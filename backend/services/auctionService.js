@@ -96,6 +96,7 @@ function publicRfqView(rfq) {
     timeRemainingMs: rfq.timeRemainingMs,
     extensionCount: rfq.extensionCount,
     bidCount: rfq.bidCount,
+    isDirect: Boolean(rfq.directVendorId),
     createdAt: rfq.createdAt,
   };
 }
@@ -128,6 +129,9 @@ async function getAuctionSnapshot(rfqOrId, user) {
   }
 
   if (user.role === ROLES.VENDOR) {
+    if (rfq.directVendorId && !idEquals(rfq.directVendorId, user._id)) {
+      throw ApiError.forbidden('This is a Direct Quote request for another vendor', { code: 'DIRECT_RFQ_OTHER_VENDOR' });
+    }
     const myBid = await Bid.findOne({ rfqId: rfq._id, vendorId: user._id });
     const eligibility = user.checkRfqEligibility(rfq);
     if (!myBid && !eligibility.eligible) {
@@ -163,19 +167,44 @@ async function countEligibleVendors(printType, totalQuantity) {
   return User.countDocuments(User.prequalifiedVendorFilter(printType, totalQuantity));
 }
 
+/**
+ * Direct RFQ (Phase 5): loads the chosen vendor and checks every lock for this design.
+ * Returns { vendor, eligibility } - the vendor must pass PERA (qualification + capability + capacity)
+ * and must not be the buyer's own vendor account (self-dealing).
+ */
+async function resolveDirectVendor(directVendorId, buyer, designSpecs) {
+  assertObjectId(directVendorId, 'vendor id');
+  const vendor = await User.findById(directVendorId);
+  if (!vendor || vendor.role !== ROLES.VENDOR) throw ApiError.notFound('Vendor not found');
+  if (buyer && samePhone(vendor.phone, buyer.phone)) {
+    throw ApiError.forbidden('You cannot request a quote from a vendor account linked to your own phone number', { code: 'SELF_DEALING' });
+  }
+  return { vendor, eligibility: vendor.checkRfqEligibility({ designSpecs }) };
+}
+
+/** Compares phone numbers by their last 9 digits (same rule as bid acceptance). */
+function samePhone(a, b) {
+  const tail = (p) => String(p || '').replace(/\D/g, '').slice(-9);
+  return tail(a).length === 9 && tail(a) === tail(b);
+}
+
 /** Dry-run used by the configurator to show quantity / delivery / eligible vendor count live. */
-async function previewRfq(input) {
+async function previewRfq(input, { directVendorId, buyer } = {}) {
   const designSpecs = buildDesignSpecs(input);
   const expectedDeliveryDays = calculateExpectedDeliveryDays(designSpecs);
+  const base = { designSpecs, totalQuantity: designSpecs.totalQuantity, expectedDeliveryDays, auctionDurationMinutes: config.auctionDurationMinutes };
+
+  if (directVendorId) {
+    const { vendor, eligibility } = await resolveDirectVendor(directVendorId, buyer, designSpecs);
+    return {
+      ...base,
+      eligibleVendorCount: eligibility.eligible ? 1 : 0,
+      canLaunch: eligibility.eligible,
+      directVendor: { _id: String(vendor._id), companyName: vendor.companyName || vendor.name, eligible: eligibility.eligible, reasons: eligibility.reasons },
+    };
+  }
   const eligibleVendorCount = await countEligibleVendors(designSpecs.printType, designSpecs.totalQuantity);
-  return {
-    designSpecs,
-    totalQuantity: designSpecs.totalQuantity,
-    expectedDeliveryDays,
-    eligibleVendorCount,
-    canLaunch: eligibleVendorCount > 0,
-    auctionDurationMinutes: config.auctionDurationMinutes,
-  };
+  return { ...base, eligibleVendorCount, canLaunch: eligibleVendorCount > 0 };
 }
 
 async function createRfq(buyer, input) {
@@ -197,11 +226,24 @@ async function createRfq(buyer, input) {
     expectedDeliveryDays = requested;
   }
 
-  // PERA Event-Level Lock - no auction is launched unless a qualified supplier exists.
-  const eligibleVendors = await User.find(
-    User.prequalifiedVendorFilter(designSpecs.printType, designSpecs.totalQuantity),
-    '_id'
-  ).lean();
+  // Direct RFQ: exclusive to one vendor, who must pass every PERA lock for this design.
+  // It still runs as an auction room (with one bidder) and ends in the same escrow + O2O order flow.
+  let directVendorId = null;
+  let eligibleVendors;
+  if (input.directVendorId) {
+    const { vendor, eligibility } = await resolveDirectVendor(input.directVendorId, buyer, designSpecs);
+    if (!eligibility.eligible) {
+      throw ApiError.unprocessable(`${vendor.companyName || vendor.name} can't take this order: ${eligibility.reasons.join('; ')}`, {
+        code: 'PERA_DIRECT_VENDOR_LOCK',
+        details: eligibility.reasons,
+      });
+    }
+    directVendorId = vendor._id;
+    eligibleVendors = [{ _id: vendor._id }];
+  } else {
+    // PERA Event-Level Lock - no auction is launched unless a qualified supplier exists.
+    eligibleVendors = await User.find(User.prequalifiedVendorFilter(designSpecs.printType, designSpecs.totalQuantity), '_id').lean();
+  }
   if (eligibleVendors.length === 0) {
     throw ApiError.unprocessable(
       `No prequalified vendor can currently fulfil ${designSpecs.totalQuantity} pcs of ${designSpecs.printType}. ` +
@@ -225,6 +267,7 @@ async function createRfq(buyer, input) {
     expiresAt,
     originalExpiresAt: expiresAt,
     eligibleVendorCount: eligibleVendors.length,
+    directVendorId,
   });
 
   const announcement = { rfq: publicRfqView(rfq) };
@@ -233,7 +276,7 @@ async function createRfq(buyer, input) {
     'rfq:new',
     announcement
   );
-  realtime.emitToRole(ROLES.ADMIN, 'rfq:new', { rfq: ownerRfqView(rfq), buyerName: buyer.name });
+  realtime.emitToRole(ROLES.ADMIN, 'rfq:new', { rfq: ownerRfqView(rfq), buyerName: buyer.name, direct: Boolean(directVendorId) });
 
   return rfq;
 }
@@ -369,6 +412,9 @@ async function placeBid(vendorId, rfqId, input) {
       throw ApiError.conflict('This auction is closed for bidding', { code: 'AUCTION_CLOSED' });
     }
 
+    if (rfq.directVendorId && !idEquals(rfq.directVendorId, vendor._id)) {
+      throw ApiError.forbidden('This is a Direct Quote request for another vendor', { code: 'DIRECT_RFQ_OTHER_VENDOR' });
+    }
     const eligibility = vendor.checkRfqEligibility(rfq);
     if (!eligibility.eligible) {
       throw ApiError.forbidden('You are not eligible to bid on this RFQ', {

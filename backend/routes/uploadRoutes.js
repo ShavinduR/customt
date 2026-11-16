@@ -38,7 +38,8 @@ async function hasImageSignature(filePath, mimeType) {
  * POST /api/uploads/logo  (multipart/form-data, field "logo")
  * Returns { path, url } - put `url` into designSpecs.logoUrl.
  */
-router.post('/logo', protect, authorize(ROLES.BUYER, ROLES.ADMIN), (req, res, next) => {
+// Buyers upload artwork; vendors upload post photos and storefront covers.
+router.post('/logo', protect, authorize(ROLES.BUYER, ROLES.VENDOR, ROLES.ADMIN), (req, res, next) => {
   logoUpload(req, res, async (err) => {
     if (err) return next(err);
     if (!req.file) return next(ApiError.badRequest('Attach an image in the "logo" field'));

@@ -156,6 +156,30 @@ const DISPUTE_RESOLUTIONS = Object.freeze({
   RESUME_PRODUCTION: 'RESUME_PRODUCTION', // e.g. vendor agrees to reprint
 });
 
+/** Phase 5: vendor posts (Global Feed) and micro-storefronts. */
+const POST_TYPES = Object.freeze({
+  PREMIUM_CATALOG: 'PREMIUM_CATALOG',
+  INSPIRATION: 'INSPIRATION',
+  CLEARANCE: 'CLEARANCE',
+});
+
+const POSTS = Object.freeze({
+  TYPES: Object.values(POST_TYPES),
+  TITLE_MIN: 3,
+  TITLE_MAX: 100,
+  DESCRIPTION_MAX: 1000,
+  COMPOSITION_MAX: 120,
+  MIN_IMAGES: 1,
+  MAX_IMAGES: 6,
+  DAILY_LIMIT: 20, // posts per vendor per rolling 24 hours (anti-spam)
+  FEED_PAGE_SIZE: 12,
+  FEED_MAX_PAGE_SIZE: 30,
+  // Garment measurements in centimetres (flat chest width x 2, body length, sleeve length).
+  SIZE_CHART_RANGES: { chestCm: [60, 180], lengthCm: [50, 110], sleeveCm: [10, 80] },
+  CLEARANCE_MAX_QUANTITY: 100000,
+  BIO_MAX: 500,
+});
+
 module.exports = {
   ROLES,
   PRINT_TYPES,
@@ -180,4 +204,6 @@ module.exports = {
   DISPUTE_CATEGORIES,
   DISPUTE_DESIRED_RESOLUTIONS,
   DISPUTE_RESOLUTIONS,
+  POST_TYPES,
+  POSTS,
 };
