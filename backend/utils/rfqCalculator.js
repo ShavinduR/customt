@@ -109,6 +109,7 @@ function validateLayers(rawText, rawImages) {
       color: String(layer.color || '').toUpperCase(),
       x: round1(clamp(layer.x, 0, 100, 50)),
       y: round1(clamp(layer.y, 0, 100, 50)),
+      rotation: round1(clamp(layer.rotation, DESIGN.ROTATION_MIN, DESIGN.ROTATION_MAX, 0)),
     };
   });
 
@@ -125,6 +126,7 @@ function validateLayers(rawText, rawImages) {
       x: round1(clamp(layer.x, 0, 100, 50)),
       y: round1(clamp(layer.y, 0, 100, 50)),
       scale: Math.round(clamp(layer.scale, DESIGN.SCALE_MIN, DESIGN.SCALE_MAX, 0.5) * 100) / 100,
+      rotation: round1(clamp(layer.rotation, DESIGN.ROTATION_MIN, DESIGN.ROTATION_MAX, 0)),
     };
   });
 

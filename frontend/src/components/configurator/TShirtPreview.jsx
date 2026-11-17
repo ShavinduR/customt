@@ -124,10 +124,12 @@ export default function TShirtPreview({ specs, view = 'front', editable = false,
         </text>
       );
     }
+    const rotation = Number(layer.rotation) || 0;
     return (
       <g
         key={layer.id}
         data-layer={layer.id}
+        transform={rotation ? `rotate(${rotation} ${cx} ${cy})` : undefined}
         onPointerDown={editable ? (e) => startDrag(layer, e) : undefined}
         style={{ cursor: interactive ? (dragging ? 'grabbing' : 'grab') : editable ? 'pointer' : 'default', opacity: textEffect.opacity }}
         filter={layer.kind === 'text' ? textEffect.filter : undefined}

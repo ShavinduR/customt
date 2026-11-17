@@ -17,7 +17,7 @@ import Privacy from './pages/Privacy';
 import Account from './pages/Account';
 import NotFound from './pages/NotFound';
 import BuyerDashboard from './pages/buyer/BuyerDashboard';
-import CreateRFQ from './pages/buyer/CreateRFQ';
+import Configurator from './pages/buyer/Configurator';
 import RFQList from './pages/buyer/RFQList';
 import RFQDetail from './pages/buyer/RFQDetail';
 import OrdersList from './pages/buyer/OrdersList';
@@ -78,9 +78,9 @@ export default function App() {
                     <Route element={<ProtectedRoute roles={['buyer']} />}>
                       <Route path="/buyer" element={<BuyerDashboard />} />
                       <Route path="/buyer/rfqs" element={<RFQList />} />
-                      <Route path="/buyer/rfqs/new" element={<CreateRFQ />} />
+                      <Route path="/buyer/rfqs/new" element={<Configurator />} />
                       {/* Direct Quote entry point used by the feed and storefronts: /create-rfq?vendorId=… */}
-                      <Route path="/create-rfq" element={<CreateRFQ />} />
+                      <Route path="/create-rfq" element={<Configurator />} />
                       <Route path="/buyer/rfqs/:id" element={<RFQDetail />} />
                       <Route path="/buyer/orders" element={<OrdersList />} />
                       <Route path="/buyer/orders/:id" element={<OrderDetail />} />

@@ -39,6 +39,8 @@ const DESIGN = Object.freeze({
   SIZE_MAX: 96,
   SCALE_MIN: 0.1,
   SCALE_MAX: 1,
+  ROTATION_MIN: -180,
+  ROTATION_MAX: 180,
 });
 
 /** Module 1 - automatic expected-delivery estimation (working days). */

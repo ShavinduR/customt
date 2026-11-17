@@ -87,6 +87,11 @@ function drawLayer(ctx, layer, area, printType, images, warnings) {
   const cx = (layer.x / 100) * area.w;
   const cy = (layer.y / 100) * area.h;
   ctx.save();
+  // Rotate around the layer's centre, exactly as the 2D preview does (SVG rotate(deg cx cy)).
+  const rotation = Number(layer.rotation) || 0;
+  ctx.translate(cx, cy);
+  if (rotation) ctx.rotate((rotation * Math.PI) / 180);
+  ctx.translate(-cx, -cy);
   if (printType === 'Sublimation') ctx.globalAlpha = 0.88;
   if (printType === 'DTF' || printType === 'Embroidery') {
     ctx.shadowColor = `rgba(0,0,0,${printType === 'Embroidery' ? 0.55 : 0.3})`;
