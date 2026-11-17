@@ -329,8 +329,8 @@ const TOUR_STEPS = [
     icon: Layers,
     body: (
       <>
-        <p>Pick a side at the top (front, back or a sleeve), then use <strong className="text-white">Text</strong> or <strong className="text-white">Image</strong> under the shirt.</p>
-        <p className="text-zinc-400">Drag a layer to move it. When one is selected, the same toolbar rotates, centres or deletes it. The dashed box is the printable area.</p>
+        <p>The shirt is shown as its cut pieces. Click a piece (front, back or a sleeve), then add <strong className="text-white">Text</strong> or an <strong className="text-white">Image</strong> from the tools on the left.</p>
+        <p className="text-zinc-400">Drag a layer to move it; the toolbar below rotates, centres or deletes it. Scroll to zoom. Prefer the whole shirt? Switch to <strong className="text-zinc-200">Garment</strong>.</p>
       </>
     ),
   },

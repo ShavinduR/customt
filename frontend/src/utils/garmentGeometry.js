@@ -78,6 +78,37 @@ export const PRINT_AREAS = {
   },
 };
 
+/**
+ * Pattern (cut-piece) geometry, for the image-RIGHT half of each garment (the wearer's left sleeve);
+ * the left half is its mirror image.
+ *  ARMHOLE:     armhole seam as a cubic [shoulder point, control 1, control 2, armpit]. It separates
+ *               the sleeve from the body (same curve as the seam drawn in DETAILS).
+ *  HEM_CORNER:  bottom corner of the body side seam; below the armpit the body ends at that line.
+ *  SLEEVE_FOLD: straight outer edge of the sleeve [top, bottom]. On the flat garment, the front and back
+ *               halves of a sleeve meet along it, so the unfolded sleeve piece is mirrored about this line.
+ */
+export const ARMHOLE = {
+  'Crew Neck': [[272, 42], [280, 70], [288, 110], [298, 149]],
+  Polo: [[272, 42], [282, 68], [290, 100], [298, 136]],
+  Hoodie: [[274, 46], [288, 80], [296, 130], [302, 176]],
+  'Short Sleeve Shirt': [[272, 42], [282, 70], [290, 110], [298, 152]],
+  'Long Sleeve Shirt': [[272, 42], [284, 76], [292, 120], [300, 168]],
+};
+export const HEM_CORNER = {
+  'Crew Neck': [300, 418],
+  Polo: [300, 418],
+  Hoodie: [304, 420],
+  'Short Sleeve Shirt': [300, 400],
+  'Long Sleeve Shirt': [300, 400],
+};
+export const SLEEVE_FOLD = {
+  'Crew Neck': [[272, 42], [352, 84]],
+  Polo: [[272, 42], [346, 80]],
+  Hoodie: [[358, 104], [378, 372]],
+  'Short Sleeve Shirt': [[272, 42], [354, 88]],
+  'Long Sleeve Shirt': [[354, 100], [372, 368]],
+};
+
 /** Which flat view a side is drawn on (sleeve prints live on the front face). */
 export const SIDE_FACE = { front: 'front', back: 'back', leftSleeve: 'front', rightSleeve: 'front' };
 
