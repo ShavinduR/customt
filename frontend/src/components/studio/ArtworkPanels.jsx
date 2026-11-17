@@ -4,8 +4,10 @@ import { uploadApi } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { cx } from '../ui';
 import TShirtPreview from '../configurator/TShirtPreview';
-import { SIDES, SIDE_LABEL } from '../../utils/garmentGeometry';
-import { FONTS, LIMITS, defaultTextSize, fontFamily, fontWeight, newLayerId, normRotation } from '../../utils/design';
+import Rulers from './Rulers';
+import { BODY, PRINT_AREAS, SIDES, SIDE_LABEL } from '../../utils/garmentGeometry';
+import { UNITS, formatLength, formatSize } from '../../utils/units';
+import { FONTS, LIMITS, defaultTextSize, fontFamily, fontWeight, newLayerId, normRotation, textExtent } from '../../utils/design';
 import { Group, IconButton, Kbd, Panel, Segmented, Slider, StudioButton, studioInput } from './StudioUI';
 
 const ACCEPT = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
@@ -190,11 +192,14 @@ function RailButton({ icon: Icon, label, active, onClick, shortcut }) {
  *  Garment mode: one side of the assembled garment, as large as the panel allows.
  * Both edit the same layers, so the 3D view always matches.
  */
-export function PatternEditor({ specs, side, onSideChange, selectedId, onSelect, onLayerMove, art, className, ...rest }) {
+export function PatternEditor({ specs, side, onSideChange, selectedId, onSelect, onLayerMove, art, units = 'cm', onUnitsChange, className, ...rest }) {
   const preview = useRef(null);
   const [mode, setModeState] = useState(loadEditorMode);
   const [tool, setTool] = useState('select');
   const [zoom, setZoom] = useState(1);
+  const [viewport, setViewport] = useState(null);
+  const garment = BODY[specs.garmentType] ? specs.garmentType : 'Crew Neck';
+  const area = PRINT_AREAS[garment][side];
   const pattern = mode === 'pattern';
   const layers = allLayersOf(specs);
   const counts = Object.fromEntries(SIDES.map((s) => [s, layers.filter((l) => l.side === s).length]));
@@ -234,7 +239,7 @@ export function PatternEditor({ specs, side, onSideChange, selectedId, onSelect,
         </div>
         {pattern ? (
           <span className="text-[11px] text-zinc-500">
-            4 pieces · working on <span className="font-semibold text-brand-300">{SIDE_LABEL[side]}</span>
+            Working on <span className="font-semibold text-brand-300">{SIDE_LABEL[side]}</span> · print area {formatSize(area.w, area.h, units)}
           </span>
         ) : (
           <Segmented size="sm" label="Side" value={side} onChange={onSideChange} className="w-full sm:w-auto" options={SIDES.map((s) => ({ value: s, label: SHORT_LABEL[s], badge: counts[s] || null }))} />
@@ -242,7 +247,8 @@ export function PatternEditor({ specs, side, onSideChange, selectedId, onSelect,
       </div>
 
       <div className="relative min-h-0 flex-1 overflow-hidden bg-zinc-950 [background-image:radial-gradient(rgba(255,255,255,0.07)_1px,transparent_1px)] [background-size:16px_16px]">
-        <div className={cx('absolute inset-0 pb-16 pt-3', pattern ? 'pl-14 pr-3' : 'px-3')}>
+        {pattern && <Rulers viewport={viewport} unit={units} />}
+        <div className={cx('absolute inset-0 pb-16', pattern ? 'pl-16 pr-3 pt-7' : 'px-3 pt-3')}>
           <TShirtPreview
             ref={preview}
             specs={specs}
@@ -252,6 +258,8 @@ export function PatternEditor({ specs, side, onSideChange, selectedId, onSelect,
             onPieceSelect={onSideChange}
             tool={tool}
             onZoomChange={setZoom}
+            units={units}
+            onViewport={pattern ? setViewport : undefined}
             editable
             fit
             selectedId={selectedId}
@@ -262,19 +270,32 @@ export function PatternEditor({ specs, side, onSideChange, selectedId, onSelect,
         </div>
 
         {pattern ? (
-          <div className="absolute left-3 top-3 flex flex-col gap-1 rounded-xl border border-white/15 bg-zinc-900/80 p-1 shadow-2xl shadow-black/40 backdrop-blur-xl" role="toolbar" aria-label="Editor tools" aria-orientation="vertical">
+          <div className="absolute left-7 top-8 flex flex-col gap-1 rounded-xl border border-white/15 bg-zinc-900/80 p-1 shadow-2xl shadow-black/40 backdrop-blur-xl" role="toolbar" aria-label="Editor tools" aria-orientation="vertical">
             <RailButton icon={MousePointer2} label="Select and move" shortcut="V" active={tool === 'select'} onClick={() => setTool('select')} />
             <RailButton icon={Hand} label="Pan" shortcut="H" active={tool === 'hand'} onClick={() => setTool('hand')} />
             <span className="mx-auto my-0.5 h-px w-5 bg-white/15" aria-hidden="true" />
             <RailButton icon={Type} label={`Add text to ${SIDE_LABEL[side].toLowerCase()}`} onClick={art.addText} />
             <RailButton icon={art.uploading ? Loader2 : ImagePlus} label={`Add image to ${SIDE_LABEL[side].toLowerCase()}`} onClick={art.pickImages} />
+            <span className="mx-auto my-0.5 h-px w-5 bg-white/15" aria-hidden="true" />
+            {UNITS.map((u) => (
+              <button
+                key={u}
+                type="button"
+                onClick={() => onUnitsChange?.(u)}
+                aria-pressed={units === u}
+                title={u === 'cm' ? 'Centimetres' : 'Inches'}
+                className={cx('h-7 w-9 rounded-lg font-mono text-[11px] transition', units === u ? 'bg-white/15 text-white' : 'text-zinc-400 hover:bg-white/10 hover:text-white')}
+              >
+                {u}
+              </button>
+            ))}
           </div>
         ) : (
           <span className="pointer-events-none absolute left-3 top-3 rounded-md bg-zinc-900/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 ring-1 ring-white/10">
             {SIDE_LABEL[side]}
           </span>
         )}
-        <p className="pointer-events-none absolute right-3 top-3 hidden max-w-[15rem] text-right text-[11px] leading-snug text-zinc-500 lg:block">
+        <p className={cx('pointer-events-none absolute right-3 hidden max-w-[15rem] text-right text-[11px] leading-snug text-zinc-500 lg:block', pattern ? 'top-8' : 'top-3')}>
           {pattern
             ? 'Click a piece to work on it, drag layers to move. Scroll to zoom, drag empty space to pan.'
             : 'Click a layer to select it, drag to move, arrow keys to nudge. Dashed box = printable area.'}
@@ -366,7 +387,7 @@ export function LayerList({ specs, side, selectedId, onSelect, art }) {
 /**
  * RIGHT PANEL, "Artwork" tab: properties of the selected layer (content, size, colour, ROTATION, position).
  */
-export function LayerInspector({ specs, selectedId, art, onSideChange }) {
+export function LayerInspector({ specs, selectedId, art, onSideChange, units = 'cm' }) {
   const layer = allLayersOf(specs).find((l) => l.id === selectedId);
 
   if (!layer) {
@@ -380,6 +401,11 @@ export function LayerInspector({ specs, selectedId, art, onSideChange }) {
   }
 
   const set = (patch, group) => art.patchLayer(layer.id, patch, group);
+  const garment = BODY[specs.garmentType] ? specs.garmentType : 'Crew Neck';
+  const area = PRINT_AREAS[garment][layer.side];
+  // Real print size: text from its estimated extent; images by width (height follows the picture's shape).
+  const extent = layer.kind === 'text' ? textExtent(layer) : null;
+  const printSize = extent ? `≈ ${formatSize(extent.w, extent.h, units)}` : `${formatLength(layer.scale * area.w, units)} wide`;
   const rotation = Number(layer.rotation) || 0;
   const rotateBy = (deg) => set({ rotation: normRotation(rotation + deg) });
 
@@ -496,17 +522,22 @@ export function LayerInspector({ specs, selectedId, art, onSideChange }) {
 
       <Group
         title="Position"
+        hint="Distance of the layer's centre from the centre of the print area."
         action={
           <button type="button" onClick={() => set({ x: 50, y: 50 })} className="flex items-center gap-1 text-xs font-medium text-brand-300 hover:text-brand-200">
             <Crosshair className="h-3.5 w-3.5" /> Centre
           </button>
         }
       >
+        <div className="flex items-center justify-between rounded-lg bg-brand-500/10 px-2.5 py-1.5 text-xs ring-1 ring-brand-400/20">
+          <span className="text-zinc-400">Print size</span>
+          <span className="font-mono font-semibold text-brand-200">{printSize}</span>
+        </div>
         <div className="grid grid-cols-2 gap-2 font-mono text-xs">
           {['x', 'y'].map((axis) => (
             <div key={axis} className="flex items-center justify-between rounded-lg bg-zinc-950/60 px-2.5 py-1.5 ring-1 ring-white/[0.06]">
               <span className="uppercase text-zinc-500">{axis}</span>
-              <span className="text-zinc-200">{layer[axis]}%</span>
+              <span className="text-zinc-200">{formatLength(((layer[axis] - 50) / 100) * (axis === 'x' ? area.w : area.h), units)}</span>
             </div>
           ))}
         </div>

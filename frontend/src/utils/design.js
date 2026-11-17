@@ -19,6 +19,11 @@ const FONT_BY_NAME = Object.fromEntries(FONTS.map((f) => [f.name, f]));
 export const fontFamily = (name) => `'${name}', ${(FONT_BY_NAME[name] || FONTS[0]).fallback}`;
 export const fontWeight = (name) => (FONT_BY_NAME[name] || FONTS[0]).weight;
 
+/** Average glyph width per font (fraction of the font size), used to estimate a text layer's width. */
+export const FONT_WIDTH = { 'Bebas Neue': 0.45, Montserrat: 0.74, 'Playfair Display': 0.6, Pacifico: 0.58 };
+/** Approximate printed extent of a text layer in design units (capital height ~0.72 of the font size). */
+export const textExtent = (layer) => ({ w: Math.max(8, layer.size * (FONT_WIDTH[layer.font] || 0.6) * layer.text.length), h: layer.size * 0.72 });
+
 export const LIMITS = { maxText: 8, maxImages: 8, textMax: 60, sizeMin: 6, sizeMax: 96, scaleMin: 0.1, scaleMax: 1, rotationMin: -180, rotationMax: 180 };
 
 /** Wraps any angle into -180…180 so repeated ±15° steps never leave the range the server accepts. */

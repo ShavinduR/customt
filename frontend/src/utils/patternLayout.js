@@ -188,6 +188,8 @@ export function patternLayout(garment) {
     garment: g,
     pieces,
     regions,
+    // Ruler zero: top-left corner of the piece area.
+    origin: { x: MARGIN, y: MARGIN },
     width: MARGIN * 2 + col[0] + GAP + col[1],
     height: rowY[1] + rowH[1] + LABEL + MARGIN,
   };
