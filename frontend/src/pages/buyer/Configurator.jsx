@@ -5,10 +5,13 @@ import {
   CalendarClock,
   CircleAlert,
   CircleCheck,
+  Columns2,
+  Compass,
   Droplets,
   Layers,
   Loader2,
   Lock,
+  Move3d,
   Minus,
   PenTool,
   Plus,
@@ -16,6 +19,7 @@ import {
   RotateCcw,
   Rocket,
   Scissors,
+  ShieldCheck,
   Shirt,
   SlidersHorizontal,
   Sparkles,
@@ -30,9 +34,10 @@ import { useToast } from '../../context/ToastContext';
 import useDebouncedValue from '../../hooks/useDebouncedValue';
 import useHistory, { useUndoShortcuts } from '../../hooks/useHistory';
 import TShirtPreview from '../../components/configurator/TShirtPreview';
+import GuidedTour, { useFirstVisitTour } from '../../components/tour/GuidedTour';
 import { Alert, Button, ErrorList, Modal, PageLoader, cx } from '../../components/ui';
 import { Group, IconButton, Kbd, Panel, PanelHeader, Segmented, StudioButton, Tile, studioInput } from '../../components/studio/StudioUI';
-import { LayerInspector, PatternPanel, allLayersOf, useArtwork } from '../../components/studio/ArtworkPanels';
+import { LayerInspector, LayerList, PatternEditor, allLayersOf, useArtwork } from '../../components/studio/ArtworkPanels';
 import { COLOR_SWATCHES, FABRIC_INFO, GARMENT_INFO, PRINT_TYPE_INFO } from '../../utils/status';
 import { SIDE_LABEL } from '../../utils/garmentGeometry';
 import { estimateDeliveryDays, layersOf, printedSides } from '../../utils/design';
@@ -289,6 +294,93 @@ function Eligibility({ loading, preview, error, directName, total, specs }) {
 
 /* ─────────────────────────────────── Page ─────────────────────────────────── */
 
+const TOUR_KEY = 'customt_tour_studio_v1';
+const VIEW_MODE_KEY = 'customt_studio_view';
+const VIEW_MODES = [
+  { value: '2d', label: '2D', icon: PenTool },
+  { value: 'split', label: 'Split', icon: Columns2 },
+  { value: '3d', label: '3D', icon: Box },
+];
+
+function loadViewMode() {
+  try {
+    const v = localStorage.getItem(VIEW_MODE_KEY);
+    return VIEW_MODES.some((m) => m.value === v) ? v : 'split';
+  } catch {
+    return 'split';
+  }
+}
+
+/** First-visit tour of the studio (6 steps). Targets are the data-tour attributes below. */
+const TOUR_STEPS = [
+  {
+    title: 'Welcome to the design studio',
+    icon: Sparkles,
+    body: (
+      <>
+        <p>Design your garment here, then let verified printers compete for the order.</p>
+        <p className="text-zinc-400">Your payment waits in escrow and is released only after you check the goods. This takes about 30 seconds.</p>
+      </>
+    ),
+  },
+  {
+    target: 'pattern',
+    title: 'Place your artwork',
+    icon: Layers,
+    body: (
+      <>
+        <p>Pick a side at the top (front, back or a sleeve), then use <strong className="text-white">Text</strong> or <strong className="text-white">Image</strong> under the shirt.</p>
+        <p className="text-zinc-400">Drag a layer to move it. When one is selected, the same toolbar rotates, centres or deletes it. The dashed box is the printable area.</p>
+      </>
+    ),
+  },
+  {
+    target: 'viewer',
+    title: 'Check it in 3D',
+    icon: Move3d,
+    body: (
+      <>
+        <p>Every change appears on the 3D model straight away. Drag to turn it, pinch or scroll to zoom.</p>
+        <p className="text-zinc-400">Use Front, Back and Side to jump between views. Need more room? Switch between <strong className="text-zinc-200">2D</strong>, <strong className="text-zinc-200">Split</strong> and <strong className="text-zinc-200">3D</strong> in the top bar.</p>
+      </>
+    ),
+  },
+  {
+    target: 'settings',
+    title: 'Fine-tune the details',
+    icon: SlidersHorizontal,
+    body: (
+      <>
+        <p><strong className="text-white">Garment</strong>: type, colour, fabric, weight and print method.</p>
+        <p><strong className="text-white">Artwork</strong>: the layer list, plus font, size, colour and rotation of the selected layer.</p>
+        <p><strong className="text-white">Order</strong>: sizes, delivery and how many printers can bid.</p>
+      </>
+    ),
+  },
+  {
+    target: 'history',
+    title: 'Experiment freely',
+    icon: Undo2,
+    body: (
+      <>
+        <p>Undo and redo any change with these buttons or <span className="font-mono text-xs">Ctrl+Z</span> / <span className="font-mono text-xs">Ctrl+Shift+Z</span>.</p>
+        <p className="text-zinc-400">Your design is saved in this browser as you work, so you can come back later.</p>
+      </>
+    ),
+  },
+  {
+    target: 'launch',
+    title: 'Launch and pay safely',
+    icon: ShieldCheck,
+    body: (
+      <>
+        <p>Launching opens a 24-hour auction: prequalified printers send their best price and delivery time.</p>
+        <p className="text-zinc-400">You pay into escrow. 30% goes to the printer when production starts, the rest only after you inspect the goods and share your PIN.</p>
+      </>
+    ),
+  },
+];
+
 const TABS = [
   { value: 'garment', label: 'Garment', icon: Shirt },
   { value: 'artwork', label: 'Artwork', icon: PenTool },
@@ -353,6 +445,20 @@ export default function Configurator() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [touched, setTouched] = useState(false);
+  const tour = useFirstVisitTour(TOUR_KEY, { ready: Boolean(catalog) });
+  const [viewMode, setViewModeState] = useState(loadViewMode);
+  const setViewMode = (mode) => {
+    setViewModeState(mode);
+    try {
+      localStorage.setItem(VIEW_MODE_KEY, mode);
+    } catch {
+      /* ignore */
+    }
+  };
+  // The tour points at both views, so it always runs in split view.
+  useEffect(() => {
+    if (tour.open) setViewModeState('split');
+  }, [tour.open]);
 
   const sizes = catalog?.sizes || ['S', 'M', 'L', 'XL', 'XXL'];
   const moq = catalog?.minOrderQuantity || 20;
@@ -541,56 +647,67 @@ export default function Configurator() {
           </span>
         )}
 
-        <div className="flex items-center gap-0.5 rounded-xl bg-zinc-900 p-1 ring-1 ring-white/[0.07]">
+        <Segmented size="sm" label="Layout" value={viewMode} onChange={setViewMode} options={VIEW_MODES} className="order-last w-full sm:order-none sm:w-auto" />
+        <StudioButton variant="ghost" icon={Compass} onClick={tour.start} className="px-2.5" title="Take the tour" aria-label="Take the tour">
+          <span className="hidden sm:inline">Tour</span>
+        </StudioButton>
+        <div data-tour="history" className="flex items-center gap-0.5 rounded-xl bg-zinc-900 p-1 ring-1 ring-white/[0.07]">
           <IconButton icon={Undo2} label="Undo (Ctrl+Z)" onClick={history.undo} disabled={!history.canUndo} />
           <IconButton icon={Redo2} label="Redo (Ctrl+Shift+Z)" onClick={history.redo} disabled={!history.canRedo} />
           <span className="mx-0.5 h-5 w-px bg-white/10" aria-hidden="true" />
           <IconButton icon={RotateCcw} label="Reset design" onClick={resetDesign} />
         </div>
-        <StudioButton variant="primary" icon={Rocket} onClick={openConfirm}>
+        <StudioButton data-tour="launch" variant="primary" icon={Rocket} onClick={openConfirm}>
           {directVendorId ? 'Send request' : 'Launch auction'}
         </StudioButton>
       </div>
 
-      {/* ── Three panes ── */}
-      <div className="grid min-h-0 flex-1 gap-3 md:grid-cols-2 xl:grid-cols-[minmax(17rem,21rem)_minmax(0,1fr)_minmax(20rem,23rem)]">
-        <PatternPanel
-          className="order-2 md:max-h-[44rem] xl:order-1 xl:max-h-none"
-          specs={specs}
-          side={side}
-          onSideChange={setSide}
-          selectedId={selectedId}
-          onSelect={selectLayer}
-          onLayerMove={moveLayer}
-          art={art}
-        />
+      {/* ── Panes: 2D editor | 3D (equal halves, or one of them full width) | settings ── */}
+      <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(20rem,22rem)]">
+        {viewMode !== '3d' && (
+          <PatternEditor
+            data-tour="pattern"
+            className={cx('h-[30rem] sm:h-[36rem] xl:h-auto', viewMode === '2d' && 'lg:col-span-2')}
+            specs={specs}
+            side={side}
+            onSideChange={setSide}
+            selectedId={selectedId}
+            onSelect={selectLayer}
+            onLayerMove={moveLayer}
+            art={art}
+          />
+        )}
 
-        {/* Centre: live 3D */}
-        <Panel className="relative order-1 h-[22rem] sm:h-[30rem] md:col-span-2 xl:order-2 xl:col-span-1 xl:h-auto">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_35%,rgba(99,102,241,0.16),transparent_60%),radial-gradient(ellipse_at_50%_100%,rgba(255,255,255,0.05),transparent_50%)]" />
-          <Suspense
-            fallback={
-              <div className="flex h-full items-center justify-center gap-2 text-sm text-zinc-400">
-                <Loader2 className="h-4 w-4 animate-spin" /> Loading 3D viewer…
-              </div>
-            }
-          >
-            <Shirt3DViewer specs={specs} variant="studio" height="100%" view={side} onViewChange={onViewChange} className="relative" />
-          </Suspense>
-          <span className="pointer-events-none absolute left-3 top-4 hidden items-center gap-1.5 rounded-lg bg-zinc-900/70 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 ring-1 ring-white/10 backdrop-blur min-[1500px]:flex">
-            <Box className="h-3 w-3 text-brand-400" /> Live 3D
-          </span>
-        </Panel>
+        {viewMode !== '2d' && (
+          <Panel data-tour="viewer" className={cx('relative h-[22rem] sm:h-[30rem] lg:h-[36rem] xl:h-auto', viewMode === '3d' && 'lg:col-span-2')}>
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_35%,rgba(99,102,241,0.16),transparent_60%),radial-gradient(ellipse_at_50%_100%,rgba(255,255,255,0.05),transparent_50%)]" />
+            <Suspense
+              fallback={
+                <div className="flex h-full items-center justify-center gap-2 text-sm text-zinc-400">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading 3D viewer…
+                </div>
+              }
+            >
+              <Shirt3DViewer specs={specs} variant="studio" height="100%" view={side} onViewChange={onViewChange} className="relative" />
+            </Suspense>
+          </Panel>
+        )}
 
         {/* Right: settings */}
-        <Panel className="order-3 md:max-h-[44rem] xl:max-h-none">
+        <Panel data-tour="settings" className="max-h-[44rem] lg:col-span-2 xl:col-span-1 xl:max-h-none">
           <PanelHeader icon={SlidersHorizontal} title="Design settings" />
           <div className="border-b border-white/[0.07] p-3">
             <Segmented label="Settings" value={tab} onChange={setTab} options={TABS} />
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
             {tab === 'garment' && <GarmentTab catalog={catalog} specs={specs} update={update} />}
-            {tab === 'artwork' && <LayerInspector specs={specs} selectedId={selectedId} art={art} onSideChange={setSide} />}
+            {tab === 'artwork' && (
+              <div className="space-y-5">
+                <LayerList specs={specs} side={side} selectedId={selectedId} onSelect={selectLayer} art={art} />
+                <div className="h-px bg-white/[0.07]" />
+                <LayerInspector specs={specs} selectedId={selectedId} art={art} onSideChange={setSide} />
+              </div>
+            )}
             {tab === 'order' && (
               <div className="space-y-6">
                 <Group title="Size breakdown" hint={`Minimum order quantity: ${moq} pieces.`}>
@@ -675,6 +792,8 @@ export default function Configurator() {
       </p>
 
       {art.fileInput}
+
+      <GuidedTour steps={TOUR_STEPS} open={tour.open} onClose={tour.close} label="Design studio tour" />
 
       <Modal
         open={confirmOpen}
