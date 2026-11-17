@@ -45,6 +45,16 @@ test('positions and sizes are clamped into range', () => {
   assert.equal(specs.imageLayers[0].scale, 1);
 });
 
+test('layer rotation is kept, clamped to ±180° and defaults to 0', () => {
+  const specs = buildDesignSpecs({
+    ...base,
+    textLayers: [text({ rotation: 15.04 }), text({ id: 't2', rotation: 720 }), text({ id: 't3' })],
+    imageLayers: [image({ rotation: -45 }), image({ id: 'i2', rotation: 'spin' })],
+  });
+  assert.deepEqual(specs.textLayers.map((l) => l.rotation), [15, 180, 0]);
+  assert.deepEqual(specs.imageLayers.map((l) => l.rotation), [-45, 0]);
+});
+
 test('invalid layers are rejected with precise messages', () => {
   const attempt = (over) => {
     try {

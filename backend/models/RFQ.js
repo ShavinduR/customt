@@ -30,6 +30,7 @@ const textLayerSchema = new mongoose.Schema(
     color: { type: String, required: true },
     x: { type: Number, min: 0, max: 100, required: true },
     y: { type: Number, min: 0, max: 100, required: true },
+    rotation: { type: Number, min: DESIGN.ROTATION_MIN, max: DESIGN.ROTATION_MAX, default: 0 },
   },
   { _id: false }
 );
@@ -42,6 +43,7 @@ const imageLayerSchema = new mongoose.Schema(
     x: { type: Number, min: 0, max: 100, required: true },
     y: { type: Number, min: 0, max: 100, required: true },
     scale: { type: Number, min: DESIGN.SCALE_MIN, max: DESIGN.SCALE_MAX, required: true },
+    rotation: { type: Number, min: DESIGN.ROTATION_MIN, max: DESIGN.ROTATION_MAX, default: 0 },
   },
   { _id: false }
 );

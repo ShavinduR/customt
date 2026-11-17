@@ -107,6 +107,9 @@ function UserMenu() {
   );
 }
 
+/** The design studio uses the full window width (three panes). */
+const STUDIO_PATHS = new Set(['/create-rfq', '/buyer/rfqs/new']);
+
 export default function AppLayout() {
   const { user } = useAuth();
   const { connected } = useSocket();
@@ -165,7 +168,7 @@ export default function AppLayout() {
           </nav>
         )}
       </header>
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+      <main className={STUDIO_PATHS.has(location.pathname) ? 'px-2 py-3 sm:px-3' : 'mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8'}>
         <Outlet />
       </main>
     </div>

@@ -1,8 +1,9 @@
 /**
  * Layered artwork model shared by the configurator, the 2D preview, the 3D texture and spec summaries.
  *
- * textLayer:  { id, side, text, font, size, color, x, y }   x/y = % of the side's print area
- * imageLayer: { id, side, url, x, y, scale }                scale = width as a fraction of the print area
+ * textLayer:  { id, side, text, font, size, color, x, y, rotation }   x/y = % of the side's print area
+ * imageLayer: { id, side, url, x, y, scale, rotation }                scale = width as a fraction of the print area
+ * rotation: degrees clockwise around the layer's centre, -180…180 (missing = 0)
  * side: 'front' | 'back' | 'leftSleeve' | 'rightSleeve'
  */
 import { SIDES } from './garmentGeometry';
@@ -18,7 +19,13 @@ const FONT_BY_NAME = Object.fromEntries(FONTS.map((f) => [f.name, f]));
 export const fontFamily = (name) => `'${name}', ${(FONT_BY_NAME[name] || FONTS[0]).fallback}`;
 export const fontWeight = (name) => (FONT_BY_NAME[name] || FONTS[0]).weight;
 
-export const LIMITS = { maxText: 8, maxImages: 8, textMax: 60, sizeMin: 6, sizeMax: 96, scaleMin: 0.1, scaleMax: 1 };
+export const LIMITS = { maxText: 8, maxImages: 8, textMax: 60, sizeMin: 6, sizeMax: 96, scaleMin: 0.1, scaleMax: 1, rotationMin: -180, rotationMax: 180 };
+
+/** Wraps any angle into -180…180 so repeated ±15° steps never leave the range the server accepts. */
+export const normRotation = (deg) => {
+  const n = ((((Number(deg) || 0) + 180) % 360) + 360) % 360 - 180;
+  return Math.round((n === -180 ? 180 : n) * 10) / 10;
+};
 
 export const newLayerId = (prefix) => `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 

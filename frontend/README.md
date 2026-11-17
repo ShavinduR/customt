@@ -26,7 +26,8 @@ src/
 ├── components/
 │   ├── ui/                     # Button, Card, Modal, Badge, StatusBadge, TrustStars, Countdown, form controls…
 │   ├── layout/                 # AppLayout (nav, live indicator, bell, user menu), ProtectedRoute
-│   ├── configurator/           # TShirtPreview (layered SVG, 4 views), ArtworkEditor, Shirt3DViewer (three.js), SizeMatrix, OptionCard
+│   ├── configurator/           # TShirtPreview (layered SVG, 4 views), Shirt3DViewer (three.js, adaptive quality, camera presets)
+│   ├── studio/                 # Design studio panes: StudioUI (dark primitives), ArtworkPanels (pattern, layers, inspector)
 │   ├── feed/                   # PostCard (gallery, size chart, type-based call to action), PostComposer (vendor)
 │   ├── auction/                # Leaderboard + ScoreBar, PriceDiagnosticAlert, SpecSummary
 │   └── orders/                 # OrderProgress, EscrowBreakdown, PaymentModal, O2OPanel, DisputeModal, DisputeThread, RatingModal
@@ -34,7 +35,7 @@ src/
     ├── Landing, Account, NotFound
     ├── auth/                   # Login (demo quick-fill), Register (everyone starts as a buyer)
     ├── feed/                   # GlobalFeed (infinite scroll), VendorStorefront (micro-storefront, Direct Quote)
-    ├── buyer/                  # Dashboard, CreateRFQ (configurator), RFQList, RFQDetail (live auction), OrdersList, OrderDetail
+    ├── buyer/                  # Dashboard, Configurator (3-pane design studio), RFQList, RFQDetail (live auction), OrdersList, OrderDetail
     ├── vendor/                 # VendorDashboard, RFQFeed (live), AuctionRoom (rank-only), MyBids, VendorOrders, VendorOrderDetail, Wallet
     └── admin/                  # AdminOverview, VendorVerification, LiveAuctions, Disputes, AdminOrders, AdminOrderDetail, Analytics, UsersAdmin
 ```

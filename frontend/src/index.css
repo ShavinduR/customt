@@ -56,3 +56,45 @@
   background-size: 24px 24px;
   background-position: 0 0, 0 12px, 12px -12px, -12px 0;
 }
+
+/* Design studio range sliders (dark): brand-coloured thumb, subtle track. */
+.studio-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 1.25rem;
+  background: transparent;
+  cursor: pointer;
+}
+.studio-range:focus-visible {
+  outline: none;
+}
+.studio-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 9999px;
+  background: rgb(255 255 255 / 0.1);
+}
+.studio-range::-moz-range-track {
+  height: 4px;
+  border-radius: 9999px;
+  background: rgb(255 255 255 / 0.1);
+}
+.studio-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  margin-top: -6px;
+  height: 16px;
+  width: 16px;
+  border-radius: 9999px;
+  background: var(--color-brand-400);
+  box-shadow: 0 0 0 4px rgb(99 102 241 / 0.2);
+}
+.studio-range::-moz-range-thumb {
+  height: 16px;
+  width: 16px;
+  border: 0;
+  border-radius: 9999px;
+  background: var(--color-brand-400);
+  box-shadow: 0 0 0 4px rgb(99 102 241 / 0.2);
+}
+.studio-range:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 5px rgb(129 140 248 / 0.45);
+}
