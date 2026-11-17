@@ -447,6 +447,21 @@ export default function Configurator() {
   const [touched, setTouched] = useState(false);
   const tour = useFirstVisitTour(TOUR_KEY, { ready: Boolean(catalog) });
   const [viewMode, setViewModeState] = useState(loadViewMode);
+  const [units, setUnitsState] = useState(() => {
+    try {
+      return localStorage.getItem('customt_units') === 'in' ? 'in' : 'cm';
+    } catch {
+      return 'cm';
+    }
+  });
+  const setUnits = (u) => {
+    setUnitsState(u);
+    try {
+      localStorage.setItem('customt_units', u);
+    } catch {
+      /* ignore */
+    }
+  };
   const setViewMode = (mode) => {
     setViewModeState(mode);
     try {
@@ -675,6 +690,8 @@ export default function Configurator() {
             onSelect={selectLayer}
             onLayerMove={moveLayer}
             art={art}
+            units={units}
+            onUnitsChange={setUnits}
           />
         )}
 
@@ -705,7 +722,7 @@ export default function Configurator() {
               <div className="space-y-5">
                 <LayerList specs={specs} side={side} selectedId={selectedId} onSelect={selectLayer} art={art} />
                 <div className="h-px bg-white/[0.07]" />
-                <LayerInspector specs={specs} selectedId={selectedId} art={art} onSideChange={setSide} />
+                <LayerInspector specs={specs} selectedId={selectedId} art={art} onSideChange={setSide} units={units} />
               </div>
             )}
             {tab === 'order' && (

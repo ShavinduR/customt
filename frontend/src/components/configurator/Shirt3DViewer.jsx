@@ -20,7 +20,7 @@ import { TEXTURE_HEIGHT, TEXTURE_WIDTH, paintDesignTexture } from '../../utils/d
  * studio viewer with a floating view toolbar (Front, Back, Side, Reset) and a quality indicator.
  */
 
-const CAMERA = { position: [0, 0.04, 1.85], fov: 35 };
+const CAMERA = { position: [0, 0.02, 2.4], fov: 35 };
 const HOME = new Spherical().setFromVector3(new Vector3(...CAMERA.position));
 const ORIGIN = new Vector3(0, 0, 0);
 /** Camera azimuth per preset (three.js Spherical.theta: 0 = looking at the front, from +Z). */
@@ -320,7 +320,7 @@ export default function Shirt3DViewer({ specs, className = '', height = '26rem',
           <Suspense fallback={<Loading dark={studio} />}>
             <Garment specs={specs} onWarnings={setWarnings} />
           </Suspense>
-          <ContactShadows position={[0, -0.56, 0]} opacity={studio ? 0.6 : 0.35} scale={2.4} blur={2.4} far={1} />
+          <ContactShadows position={[0, -0.45, 0]} opacity={studio ? 0.6 : 0.35} scale={2.4} blur={2.4} far={1} />
           <OrbitControls
             makeDefault
             enablePan

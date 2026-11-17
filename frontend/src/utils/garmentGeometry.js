@@ -8,10 +8,47 @@
  * outline, so a point drawn here lands on the same spot of the 3D garment.
  */
 
-export const VIEW_W = 400;
+/**
+ * Real proportions. The outlines below were first drawn in a 400-unit-wide space ("raw" coordinates,
+ * centre x = 200) at about half the width of a real garment. They are widened by KX about the centre into
+ * the real design space, where UNITS_PER_CM converts to centimetres: the size-M T-shirt becomes
+ * ~53 cm wide (chest) x ~73 cm long (high point of shoulder to hem), like a standard size chart.
+ */
+export const KX = 1.5;
+export const VIEW_W = 620;
 export const VIEW_H = 460;
+export const UNITS_PER_CM = 5.5;
+const RAW_CX = 200;
+const tx = (x) => VIEW_W / 2 + (x - RAW_CX) * KX;
+const round2 = (v) => Math.round(v * 100) / 100;
 
-export const BODY = {
+/** Applies the raw → real transform to an absolute SVG path (M L C Q H V A Z). Arc radii are kept. */
+function transformPath(d) {
+  const tokens = d.match(/[A-Za-z]|-?\d*\.?\d+/g);
+  const out = [];
+  let i = 0;
+  let cmd = null;
+  const n = () => Number(tokens[i++]);
+  const xy = () => out.push(round2(tx(n())), round2(n()));
+  while (i < tokens.length) {
+    if (/[A-Za-z]/.test(tokens[i])) {
+      cmd = tokens[i++];
+      out.push(cmd);
+      if (cmd === 'Z') continue;
+    }
+    if (cmd === 'M' || cmd === 'L') xy();
+    else if (cmd === 'C') { xy(); xy(); xy(); }
+    else if (cmd === 'Q') { xy(); xy(); }
+    else if (cmd === 'H') out.push(round2(tx(n())));
+    else if (cmd === 'V') out.push(round2(n()));
+    else if (cmd === 'A') { out.push(n(), n(), n(), n(), n()); xy(); }
+    else throw new Error(`Unsupported path command ${cmd}`);
+  }
+  return out.join(' ');
+}
+const mapObject = (obj, fn) => Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, fn(v, k)]));
+
+const RAW_BODY = {
   'Crew Neck':
     'M128 42 C145 34 158 30 166 28 C178 46 222 46 234 28 C242 30 255 34 272 42 L352 84 C356 86 357 90 355 94 L328 156 C326 160 322 161 318 159 L298 149 L300 418 C300 424 296 428 290 428 L110 428 C104 428 100 424 100 418 L102 149 L82 159 C78 161 74 160 72 156 L45 94 C43 90 44 86 48 84 Z',
   Polo:
@@ -24,6 +61,8 @@ export const BODY = {
   'Long Sleeve Shirt':
     'M128 42 C145 34 158 30 166 28 C178 46 222 46 234 28 C242 30 255 34 272 42 L334 72 C346 78 352 88 354 100 L372 368 C373 376 368 382 360 383 L334 386 C326 387 320 382 319 374 L300 168 L300 400 C300 404 298 408 294 410 C250 438 150 438 106 410 C102 408 100 404 100 400 L100 168 L81 374 C80 382 74 387 66 386 L40 383 C32 382 27 376 28 368 L46 100 C48 88 54 78 66 72 Z',
 };
+
+export const BODY = mapObject(RAW_BODY, transformPath);
 
 /**
  * Indices of the outline segments that are openings (neck, cuffs, hem), counted per drawing command
@@ -45,7 +84,7 @@ export const SIDE_LABEL = { front: 'Front', back: 'Back', leftSleeve: 'Left slee
  * the area's own (rotated) width and height. Sleeves are the wearer's sleeves: the wearer's LEFT sleeve
  * appears on the viewer's RIGHT in the front view. Sleeve prints sit on the front face of the sleeve.
  */
-export const PRINT_AREAS = {
+const RAW_PRINT_AREAS = {
   'Crew Neck': {
     front: { cx: 200, cy: 205, w: 130, h: 250, rotate: 0 },
     back: { cx: 200, cy: 205, w: 140, h: 280, rotate: 0 },
@@ -78,6 +117,29 @@ export const PRINT_AREAS = {
   },
 };
 
+/** Moves a rotated raw print area into the real space (rotation and size follow the widening). */
+function transformArea(a) {
+  const rad = (a.rotate * Math.PI) / 180;
+  const ux = Math.cos(rad) * KX;
+  const uy = Math.sin(rad);
+  const su = Math.hypot(ux, uy);
+  return { cx: round2(tx(a.cx)), cy: a.cy, w: round2(a.w * su), h: round2((a.h * KX) / su), rotate: round2((Math.atan2(uy, ux) * 180) / Math.PI) };
+}
+/** Body print areas in centimetres (standard maximum print sizes), centred on the garment. */
+const bodyArea = (cy, wCm, hCm) => ({ cx: VIEW_W / 2, cy, w: wCm * UNITS_PER_CM, h: hCm * UNITS_PER_CM, rotate: 0 });
+const BODY_AREAS = {
+  'Crew Neck': { front: bodyArea(205, 30, 40), back: bodyArea(205, 30, 40) },
+  Polo: { front: bodyArea(240, 28, 30), back: bodyArea(210, 30, 40) },
+  Hoodie: { front: bodyArea(238, 28, 26), back: bodyArea(250, 32, 36) },
+  'Short Sleeve Shirt': { front: bodyArea(215, 28, 36), back: bodyArea(240, 30, 40) },
+  'Long Sleeve Shirt': { front: bodyArea(215, 28, 36), back: bodyArea(240, 30, 40) },
+};
+export const PRINT_AREAS = mapObject(RAW_PRINT_AREAS, (areas, garment) => ({
+  ...BODY_AREAS[garment],
+  leftSleeve: transformArea(areas.leftSleeve),
+  rightSleeve: transformArea(areas.rightSleeve),
+}));
+
 /**
  * Pattern (cut-piece) geometry, for the image-RIGHT half of each garment (the wearer's left sleeve);
  * the left half is its mirror image.
@@ -87,26 +149,61 @@ export const PRINT_AREAS = {
  *  SLEEVE_FOLD: straight outer edge of the sleeve [top, bottom]. On the flat garment, the front and back
  *               halves of a sleeve meet along it, so the unfolded sleeve piece is mirrored about this line.
  */
-export const ARMHOLE = {
-  'Crew Neck': [[272, 42], [280, 70], [288, 110], [298, 149]],
-  Polo: [[272, 42], [282, 68], [290, 100], [298, 136]],
-  Hoodie: [[274, 46], [288, 80], [296, 130], [302, 176]],
-  'Short Sleeve Shirt': [[272, 42], [282, 70], [290, 110], [298, 152]],
-  'Long Sleeve Shirt': [[272, 42], [284, 76], [292, 120], [300, 168]],
-};
-export const HEM_CORNER = {
+
+const RAW_HEM_CORNER = {
   'Crew Neck': [300, 418],
   Polo: [300, 418],
   Hoodie: [304, 420],
   'Short Sleeve Shirt': [300, 400],
   'Long Sleeve Shirt': [300, 400],
 };
-export const SLEEVE_FOLD = {
+const RAW_SLEEVE_FOLD = {
   'Crew Neck': [[272, 42], [352, 84]],
   Polo: [[272, 42], [346, 80]],
   Hoodie: [[358, 104], [378, 372]],
   'Short Sleeve Shirt': [[272, 42], [354, 88]],
   'Long Sleeve Shirt': [[354, 100], [372, 368]],
+};
+const txPt = ([x, y]) => [round2(tx(x)), y];
+export const HEM_CORNER = mapObject(RAW_HEM_CORNER, txPt);
+export const SLEEVE_FOLD = mapObject(RAW_SLEEVE_FOLD, (line) => line.map(txPt));
+const RAW_ARMPIT = {
+  'Crew Neck': [298, 149],
+  Polo: [298, 136],
+  Hoodie: [302, 176],
+  'Short Sleeve Shirt': [298, 152],
+  'Long Sleeve Shirt': [300, 168],
+};
+/**
+ * Armhole seam from the top of the sleeve fold to the armpit. For set-in short sleeves it leaves the fold at
+ * a right angle, so the unfolded sleeve piece gets a rounded cap (as on a real sleeve pattern), then scoops
+ * down to the armpit.
+ */
+/**
+ * Long, hanging sleeves (hoodie, long sleeve shirt) keep their drawn seam from the shoulder point: their
+ * sleeves hang close to the body, so a right-angle cap would push the shoulder into the body piece.
+ */
+const RAW_HANGING_ARMHOLE = {
+  Hoodie: [[274, 46], [288, 80], [296, 130], [302, 176]],
+  'Long Sleeve Shirt': [[272, 42], [284, 76], [292, 120], [300, 168]],
+};
+export const ARMHOLE = mapObject(SLEEVE_FOLD, ([top, bottom], garment) => {
+  if (RAW_HANGING_ARMHOLE[garment]) return RAW_HANGING_ARMHOLE[garment].map(txPt);
+  const ap = txPt(RAW_ARMPIT[garment]);
+  const len = Math.hypot(bottom[0] - top[0], bottom[1] - top[1]);
+  const u = [(bottom[0] - top[0]) / len, (bottom[1] - top[1]) / len];
+  let nrm = [-u[1], u[0]];
+  if ((ap[0] - top[0]) * nrm[0] + (ap[1] - top[1]) * nrm[1] < 0) nrm = [-nrm[0], -nrm[1]];
+  const d = Math.hypot(ap[0] - top[0], ap[1] - top[1]);
+  const c1 = [round2(top[0] + 0.4 * d * nrm[0]), round2(top[1] + 0.4 * d * nrm[1])];
+  const c2 = [round2(ap[0] - 0.15 * d), round2(ap[1] - 0.35 * d)];
+  return [top, c1, c2, ap];
+});
+const armholeSeam = (g) => {
+  const [p0, c1, c2, p3] = ARMHOLE[g];
+  const m = ([x, y]) => `${round2(VIEW_W - x)} ${y}`;
+  const q = ([x, y]) => `${x} ${y}`;
+  return `M${q(p0)} C${q(c1)} ${q(c2)} ${q(p3)} M${m(p0)} C${m(c1)} ${m(c2)} ${m(p3)}`;
 };
 
 /** Which flat view a side is drawn on (sleeve prints live on the front face). */
@@ -116,12 +213,12 @@ export const SIDE_FACE = { front: 'front', back: 'back', leftSleeve: 'front', ri
  * Construction details drawn over the base colour. Colours are brightness shifts of the base colour
  * (percent), so they suit any garment colour. Used by the SVG preview and the 3D texture.
  */
-const circle = (cx, cy, r) => `M${cx + r} ${cy} A${r} ${r} 0 1 1 ${cx - r} ${cy} A${r} ${r} 0 1 1 ${cx + r} ${cy} Z`;
+// Horizontal half-width is pre-divided by KX so buttons stay round after the widening.
+const circle = (cx, cy, r) => `M${cx + r / KX} ${cy} A${r} ${r} 0 1 1 ${cx - r / KX} ${cy} A${r} ${r} 0 1 1 ${cx + r / KX} ${cy} Z`;
 
-export const DETAILS = {
+const RAW_DETAILS = {
   'Crew Neck': {
     both: [
-      { d: 'M102 149 C112 110 120 70 128 42 M298 149 C288 110 280 70 272 42', stroke: -18, width: 1.2 },
       { d: 'M100 412 L300 412', stroke: -18, width: 1, dash: [4, 3] },
       { d: 'M78 150 L52 98 M322 150 L348 98', stroke: -18, width: 1, dash: [3, 3] },
     ],
@@ -133,7 +230,6 @@ export const DETAILS = {
   },
   Polo: {
     both: [
-      { d: 'M102 136 C110 100 118 68 128 42 M298 136 C290 100 282 68 272 42', stroke: -18, width: 1.2 },
       { d: 'M320 144 L298 136 M80 144 L102 136', stroke: -28, width: 1.2 },
       { d: 'M100 412 L300 412', stroke: -18, width: 1, dash: [4, 3] },
     ],
@@ -151,7 +247,6 @@ export const DETAILS = {
       { d: 'M322 366 L377 360 L378 372 C379 380 374 386 366 387 L338 390 C330 391 324 386 323 378 Z', fill: -10 },
       { d: 'M78 366 L23 360 L22 372 C21 380 26 386 34 387 L62 390 C70 391 76 386 77 378 Z', fill: -10 },
       { d: 'M96 404 L304 404 L304 420 C304 426 300 430 294 430 L106 430 C100 430 96 426 96 420 Z', fill: -10 },
-      { d: 'M98 176 C104 130 112 80 126 46 M302 176 C296 130 288 80 274 46', stroke: -18, width: 1.2 },
     ],
     front: [
       { d: 'M132 322 L268 322 L290 396 L110 396 Z', stroke: -28, width: 2 },
@@ -166,7 +261,6 @@ export const DETAILS = {
   },
   'Short Sleeve Shirt': {
     both: [
-      { d: 'M102 152 C110 110 118 70 128 42 M298 152 C290 110 282 70 272 42', stroke: -18, width: 1.2 },
       { d: 'M350 100 L328 160 M50 100 L72 160', stroke: -18, width: 1, dash: [3, 3] },
       { d: 'M104 403 C150 430 250 430 296 403', stroke: -18, width: 1, dash: [4, 3] },
     ],
@@ -187,7 +281,6 @@ export const DETAILS = {
   },
   'Long Sleeve Shirt': {
     both: [
-      { d: 'M100 168 C108 120 116 76 128 42 M300 168 C292 120 284 76 272 42', stroke: -18, width: 1.2 },
       { d: 'M370 340 L372 368 C373 376 368 382 360 383 L334 386 C326 387 320 382 319 374 L316.5 346 Z', fill: -8, stroke: -26, width: 1 },
       { d: 'M30 340 L28 368 C27 376 32 382 40 383 L66 386 C74 387 80 382 81 374 L83.5 346 Z', fill: -8, stroke: -26, width: 1 },
       { d: `${circle(356, 364, 2.6)} ${circle(44, 364, 2.6)}`, fill: 22, stroke: -30, width: 0.8 },
@@ -209,6 +302,12 @@ export const DETAILS = {
     ],
   },
 };
+
+// Real-space details: every raw path widened, plus the armhole seams generated from ARMHOLE.
+export const DETAILS = mapObject(RAW_DETAILS, (faces, garment) => ({
+  ...mapObject(faces, (list) => list.map((d) => ({ ...d, d: transformPath(d.d) }))),
+  both: [{ d: armholeSeam(garment), stroke: -18, width: 1.2 }, ...(faces.both || []).map((d) => ({ ...d, d: transformPath(d.d) }))],
+}));
 
 export const detailsFor = (garment, face) => [...(DETAILS[garment]?.both || []), ...(DETAILS[garment]?.[face] || [])];
 

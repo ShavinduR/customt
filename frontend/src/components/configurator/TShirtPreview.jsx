@@ -1,7 +1,8 @@
-import { forwardRef, useCallback, useEffect, useId, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { BODY, PRINT_AREAS, SIDES, SIDE_FACE, VIEW_H, VIEW_W, detailsFor, shade } from '../../utils/garmentGeometry';
-import { fontFamily, fontWeight, layersOf } from '../../utils/design';
+import { FONT_WIDTH, fontFamily, fontWeight, layersOf } from '../../utils/design';
 import { patternLayout, toSvgMatrix } from '../../utils/patternLayout';
+import { formatSize } from '../../utils/units';
 
 /**
  * Layered SVG garment renderer, used by the design studio (editable) and by order/auction pages (read-only).
@@ -16,7 +17,6 @@ import { patternLayout, toSvgMatrix } from '../../utils/patternLayout';
  */
 
 const SLEEVE_VIEW = { w: 140, h: 161 };
-const FONT_WIDTH = { 'Bebas Neue': 0.45, Montserrat: 0.74, 'Playfair Display': 0.6, Pacifico: 0.58 };
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 5;
 const clampPct = (v) => Math.max(0, Math.min(100, Math.round(v * 10) / 10));
@@ -40,6 +40,8 @@ const TShirtPreview = forwardRef(function TShirtPreview(
     onPieceSelect,
     tool = 'select',
     onZoomChange,
+    units = 'cm',
+    onViewport,
   },
   ref
 ) {
@@ -49,6 +51,7 @@ const TShirtPreview = forwardRef(function TShirtPreview(
   const drag = useRef(null);
   const pan = useRef(null);
   const pieceHit = useRef(false);
+  const zoomGroup = useRef(null);
   const [dragging, setDragging] = useState(false);
   const [panning, setPanning] = useState(false);
   const [zoom, setZoom] = useState({ s: 1, x: 0, y: 0 });
@@ -99,6 +102,31 @@ const TShirtPreview = forwardRef(function TShirtPreview(
   useImperativeHandle(ref, () => ({ zoomIn: () => zoomAt(1.25), zoomOut: () => zoomAt(0.8), fit: () => setZoom({ s: 1, x: 0, y: 0 }) }), [zoomAt]);
   useEffect(() => onZoomChange?.(zoom.s), [zoom.s, onZoomChange]);
   useEffect(() => setZoom({ s: 1, x: 0, y: 0 }), [garment, pattern]);
+
+  // Reports how layout units map to screen pixels (for the rulers): screenX = x + k·u, screenY = y + k·v.
+  const lastViewport = useRef('');
+  const reportViewport = useCallback(() => {
+    const ctm = zoomGroup.current?.getScreenCTM();
+    if (!ctm || !layout || !onViewport) return;
+    const key = `${ctm.a.toFixed(4)}|${ctm.e.toFixed(1)}|${ctm.f.toFixed(1)}|${layout.garment}`;
+    if (key === lastViewport.current) return; // only report real changes (the parent re-renders on each report)
+    lastViewport.current = key;
+    onViewport({ k: ctm.a, x: ctm.e, y: ctm.f, origin: layout.origin });
+  }, [onViewport, layout]);
+  useLayoutEffect(() => {
+    if (pattern) reportViewport();
+  });
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!pattern || !svg || !onViewport) return undefined;
+    const ro = new ResizeObserver(reportViewport);
+    ro.observe(svg);
+    window.addEventListener('scroll', reportViewport, true);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('scroll', reportViewport, true);
+    };
+  }, [pattern, onViewport, reportViewport]);
 
   useEffect(() => {
     const svg = svgRef.current;
@@ -302,7 +330,7 @@ const TShirtPreview = forwardRef(function TShirtPreview(
   };
 
   const renderPattern = () => (
-    <g transform={`translate(${zoom.x} ${zoom.y}) scale(${zoom.s})`}>
+    <g ref={zoomGroup} transform={`translate(${zoom.x} ${zoom.y}) scale(${zoom.s})`}>
       {layout.pieces.map((piece) => {
         const isActive = editable && piece.side === activeSide;
         return (
@@ -335,7 +363,7 @@ const TShirtPreview = forwardRef(function TShirtPreview(
               {piece.label}
             </text>
             <text x={piece.rect.x + piece.rect.w / 2} y={piece.rect.y + piece.rect.h + 36} textAnchor="middle" fontSize="10" fill="#71717a" fontFamily="Inter, sans-serif" pointerEvents="none">
-              cut 1
+              {formatSize(piece.rect.w, piece.rect.h, units)} · cut 1
             </text>
           </g>
         );
@@ -408,11 +436,11 @@ const TShirtPreview = forwardRef(function TShirtPreview(
       ) : (
         <>
           <g transform={viewTransform}>
-            {!sleeveView && <ellipse cx="200" cy="446" rx="130" ry="8" fill="#0f172a" opacity="0.08" />}
+            {!sleeveView && <ellipse cx={VIEW_W / 2} cy="446" rx="190" ry="8" fill="#0f172a" opacity="0.08" />}
             {renderFace(face, { ownedSides: SIDES.filter((s) => SIDE_FACE[s] === face) })}
           </g>
           {!sleeveView && (
-            <text x="200" y="458" textAnchor="middle" fontSize="10" fill="#94a3b8" fontFamily="Inter, sans-serif" letterSpacing="2">
+            <text x={VIEW_W / 2} y="458" textAnchor="middle" fontSize="10" fill="#94a3b8" fontFamily="Inter, sans-serif" letterSpacing="2">
               {face.toUpperCase()}
             </text>
           )}

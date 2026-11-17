@@ -23,9 +23,9 @@ import { BODY, OPEN_SEGMENTS, VIEW_W, VIEW_H, MODEL_FILE } from '../src/utils/ga
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DEPTH = { 'Crew Neck': 3.3, Polo: 3.3, Hoodie: 3.7, 'Short Sleeve Shirt': 3.3, 'Long Sleeve Shirt': 3.3 };
-const BOUNDARY_STEP = 3; // px between outline vertices
-const GRID_STEP = 4.5; // px between interior vertices
-const UNITS_PER_PX = 1 / 400; // model is ~1 unit wide
+const BOUNDARY_STEP = 3.5; // px between outline vertices
+const GRID_STEP = 5.5; // px between interior vertices
+const UNITS_PER_PX = 1 / 480; // a real-proportion garment is ~1.1 units wide and ~0.85 tall
 const SMOOTHING_PASSES = 12;
 
 // ── SVG path (absolute M/L/C/Z only) → list of segments, each a fine polyline ─────────────────────
