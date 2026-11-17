@@ -95,3 +95,17 @@ test('the original single text/logo format is converted into layers', () => {
   assert.equal(specs.imageLayers.length, 1);
   assert.equal(specs.imageLayers[0].side, 'front');
 });
+
+test('button-up shirts are accepted, including long-sleeve prints, and add their production days', () => {
+  const layers = { textLayers: [text(), text({ id: 't2', side: 'leftSleeve', text: 'HR' })], imageLayers: [] };
+  const short = buildDesignSpecs({ ...base, garmentType: 'Short Sleeve Shirt', ...layers });
+  const long = buildDesignSpecs({ ...base, garmentType: 'Long Sleeve Shirt', ...layers });
+  assert.equal(short.garmentType, 'Short Sleeve Shirt');
+  assert.deepEqual(long.printedSides, ['front', 'leftSleeve']);
+  // Same spec otherwise, so the difference is the garment's extra days (short 1, long 2).
+  assert.equal(calculateExpectedDeliveryDays(long) - calculateExpectedDeliveryDays(short), 1);
+  assert.throws(
+    () => buildDesignSpecs({ ...base, garmentType: 'Tank Top', ...layers }),
+    (err) => JSON.stringify(err.details).includes('garmentType must be one of')
+  );
+});

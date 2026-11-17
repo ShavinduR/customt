@@ -38,9 +38,11 @@ export const PRINT_TYPE_INFO = {
 };
 
 export const GARMENT_INFO = {
-  'Crew Neck': 'Classic round-neck tee for events and campaigns',
-  Polo: 'Collared shirt for corporate and staff uniforms',
+  'Crew Neck': 'Classic round-neck T-shirt for events and campaigns',
+  Polo: 'Collared polo T-shirt for corporate and staff uniforms',
   Hoodie: 'Warm pullover with hood and front pocket',
+  'Short Sleeve Shirt': 'Button-up collared shirt for office and school uniforms',
+  'Long Sleeve Shirt': 'Formal button-up shirt with cuffs for corporate wear',
 };
 
 export const FABRIC_INFO = {

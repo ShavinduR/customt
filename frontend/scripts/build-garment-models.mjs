@@ -22,7 +22,7 @@ import Delaunator from 'delaunator';
 import { BODY, OPEN_SEGMENTS, VIEW_W, VIEW_H, MODEL_FILE } from '../src/utils/garmentGeometry.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const DEPTH = { 'Crew Neck': 3.3, Polo: 3.3, Hoodie: 3.7 };
+const DEPTH = { 'Crew Neck': 3.3, Polo: 3.3, Hoodie: 3.7, 'Short Sleeve Shirt': 3.3, 'Long Sleeve Shirt': 3.3 };
 const BOUNDARY_STEP = 3; // px between outline vertices
 const GRID_STEP = 4.5; // px between interior vertices
 const UNITS_PER_PX = 1 / 400; // model is ~1 unit wide
@@ -286,5 +286,5 @@ for (const garment of Object.keys(BODY)) {
   const file = join(ROOT, 'public', MODEL_FILE[garment]);
   const glb = writeGlb(mesh);
   writeFileSync(file, glb);
-  console.log(`${garment.padEnd(9)} -> ${MODEL_FILE[garment]}  ${mesh.vertexCount} vertices, ${mesh.triangleCount} triangles, ${(glb.length / 1024).toFixed(0)} KB`);
+  console.log(`${garment.padEnd(18)} -> ${MODEL_FILE[garment]}  ${mesh.vertexCount} vertices, ${mesh.triangleCount} triangles, ${(glb.length / 1024).toFixed(0)} KB`);
 }

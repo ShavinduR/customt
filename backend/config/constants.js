@@ -10,7 +10,7 @@ const ROLES = Object.freeze({
 });
 
 const PRINT_TYPES = Object.freeze(['Screen Printing', 'DTF', 'Embroidery', 'Sublimation']);
-const GARMENT_TYPES = Object.freeze(['Crew Neck', 'Polo', 'Hoodie']);
+const GARMENT_TYPES = Object.freeze(['Crew Neck', 'Polo', 'Hoodie', 'Short Sleeve Shirt', 'Long Sleeve Shirt']);
 const FABRICS = Object.freeze(['100% Cotton', 'Pique/Crocodile', 'Dry-Fit/Wetlook']);
 const GSM_OPTIONS = Object.freeze([160, 180, 200, 220]);
 const SIZES = Object.freeze(['S', 'M', 'L', 'XL', 'XXL']);
@@ -55,6 +55,9 @@ const DELIVERY_ESTIMATION = Object.freeze({
     'Crew Neck': 0,
     Polo: 1,
     Hoodie: 2,
+    // Button-up shirts: collar, placket and buttons (long sleeve adds cuffs).
+    'Short Sleeve Shirt': 1,
+    'Long Sleeve Shirt': 2,
   },
   piecesPerExtraDay: 100,
   bothSidesExtraDays: 1,
