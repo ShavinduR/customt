@@ -16,7 +16,7 @@ const clampPct = (v) => Math.max(0, Math.min(100, Math.round(v * 10) / 10));
 
 const areaTransform = (a) => `translate(${a.cx} ${a.cy}) rotate(${a.rotate}) translate(${-a.w / 2} ${-a.h / 2})`;
 
-export default function TShirtPreview({ specs, view = 'front', editable = false, selectedId = null, onSelect, onLayerMove, className = '', showPrintArea = false }) {
+export default function TShirtPreview({ specs, view = 'front', editable = false, selectedId = null, onSelect, onLayerMove, className = '', showPrintArea = false, fit = false }) {
   const uid = useId().replace(/:/g, '');
   const svgRef = useRef(null);
   const areaRefs = useRef({});
@@ -149,7 +149,7 @@ export default function TShirtPreview({ specs, view = 'front', editable = false,
     <svg
       ref={svgRef}
       viewBox={viewBox}
-      className={`h-auto w-full select-none ${className}`}
+      className={`${fit ? 'h-full w-full' : 'h-auto w-full'} select-none ${className}`}
       role="img"
       aria-label={`${specs.garmentType || 'T-shirt'} preview, ${view} view`}
       tabIndex={editable ? 0 : undefined}

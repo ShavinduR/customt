@@ -1,12 +1,12 @@
 import { useRef, useState } from 'react';
-import { Crosshair, ImagePlus, Layers, Loader2, MousePointerClick, RotateCcw, RotateCw, Trash2, Type } from 'lucide-react';
+import { Crosshair, ImagePlus, Loader2, MousePointerClick, PenTool, RotateCcw, RotateCw, Trash2, Type } from 'lucide-react';
 import { uploadApi } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { cx } from '../ui';
 import TShirtPreview from '../configurator/TShirtPreview';
 import { SIDES, SIDE_LABEL } from '../../utils/garmentGeometry';
 import { FONTS, LIMITS, defaultTextSize, fontFamily, fontWeight, newLayerId, normRotation } from '../../utils/design';
-import { Group, IconButton, Kbd, Panel, PanelHeader, Segmented, Slider, StudioButton, studioInput } from './StudioUI';
+import { Group, IconButton, Kbd, Panel, Segmented, Slider, StudioButton, studioInput } from './StudioUI';
 
 const ACCEPT = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
 const MAX_MB = 2;
@@ -153,68 +153,100 @@ function LayerThumb({ layer }) {
 }
 
 /**
- * LEFT PANEL: the flat 2D "pattern" view of one side (drag layers to place them) and that side's layer stack.
+ * 2D EDITOR (left half in split view): one side of the garment, drawn as large as the panel allows so
+ * layers are easy to grab. Floating tools under the garment: add text/image and, for the selected layer,
+ * rotate, centre and delete.
  */
-export function PatternPanel({ specs, side, onSideChange, selectedId, onSelect, onLayerMove, art, className }) {
+export function PatternEditor({ specs, side, onSideChange, selectedId, onSelect, onLayerMove, art, className, ...rest }) {
   const layers = allLayersOf(specs);
   const counts = Object.fromEntries(SIDES.map((s) => [s, layers.filter((l) => l.side === s).length]));
-  const sideLayers = layers.filter((l) => l.side === side);
+  const selected = layers.find((l) => l.id === selectedId && l.side === side);
+  const rotation = Number(selected?.rotation) || 0;
 
   return (
-    <Panel className={className}>
-      <PanelHeader icon={Layers} title="Pattern & layers">
-        <span className="text-[11px] text-zinc-500">2D · drag to place</span>
-      </PanelHeader>
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-        <Segmented size="sm" label="Side" value={side} onChange={onSideChange} options={SIDES.map((s) => ({ value: s, label: SHORT_LABEL[s], badge: counts[s] || null }))} />
+    <Panel className={className} {...rest}>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.07] px-3 py-2.5">
+        <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
+          <PenTool className="h-3.5 w-3.5 text-brand-400" /> 2D editor
+        </h2>
+        <Segmented size="sm" label="Side" value={side} onChange={onSideChange} className="w-full sm:w-auto" options={SIDES.map((s) => ({ value: s, label: SHORT_LABEL[s], badge: counts[s] || null }))} />
+      </div>
 
-        <div className="relative overflow-hidden rounded-xl bg-zinc-950 ring-1 ring-white/[0.06] [background-image:radial-gradient(rgba(255,255,255,0.07)_1px,transparent_1px)] [background-size:14px_14px]">
-          <div className="px-6 py-3">
-            <TShirtPreview specs={specs} view={side} editable selectedId={selectedId} onSelect={onSelect} onLayerMove={onLayerMove} showPrintArea />
-          </div>
-          <span className="pointer-events-none absolute left-2.5 top-2.5 rounded-md bg-zinc-900/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 ring-1 ring-white/10">
-            {SIDE_LABEL[side]}
-          </span>
+      <div className="relative min-h-0 flex-1 bg-zinc-950 [background-image:radial-gradient(rgba(255,255,255,0.07)_1px,transparent_1px)] [background-size:16px_16px]">
+        <div className="absolute inset-0 px-3 pb-16 pt-3">
+          <TShirtPreview specs={specs} view={side} editable fit selectedId={selectedId} onSelect={onSelect} onLayerMove={onLayerMove} showPrintArea />
         </div>
-        <p className="flex items-center gap-1.5 text-[11px] leading-snug text-zinc-500">
-          <MousePointerClick className="h-3.5 w-3.5 shrink-0" /> Click a layer to select, drag to move, arrow keys to nudge. The dashed box is the printable area.
+        <span className="pointer-events-none absolute left-3 top-3 rounded-md bg-zinc-900/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 ring-1 ring-white/10">
+          {SIDE_LABEL[side]}
+        </span>
+        <p className="pointer-events-none absolute right-3 top-3 hidden max-w-[15rem] text-right text-[11px] leading-snug text-zinc-500 lg:block">
+          Click a layer to select it, drag to move, arrow keys to nudge. Dashed box = printable area.
         </p>
 
-        <AddButtons art={art} compact />
-
-        <Group title={`Layers · ${SIDE_LABEL[side]}`}>
-          {sideLayers.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-white/10 px-3 py-5 text-center text-xs text-zinc-500">Nothing on this side yet.</p>
-          ) : (
-            <ul className="space-y-1.5">
-              {/* Top of the list = drawn last (on top), like a layers panel in a design tool. */}
-              {[...sideLayers].reverse().map((l) => (
-                <li key={l.id}>
-                  <div
-                    className={cx(
-                      'flex items-center gap-2.5 rounded-xl border px-2 py-1.5 transition',
-                      l.id === selectedId ? 'border-brand-400/60 bg-brand-500/10' : 'border-transparent bg-zinc-950/40 hover:border-white/10'
-                    )}
-                  >
-                    <button type="button" onClick={() => onSelect(l.id)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
-                      <LayerThumb layer={l} />
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium text-zinc-100">{l.kind === 'image' ? 'Image' : l.text || '(empty text)'}</span>
-                        <span className="block text-[11px] text-zinc-500">
-                          {l.kind === 'image' ? `${Math.round(l.scale * 100)}% width` : `${l.font} · ${l.size}px`}
-                          {l.rotation ? ` · ${l.rotation}°` : ''}
-                        </span>
-                      </span>
-                    </button>
-                    <IconButton icon={Trash2} label="Delete layer" onClick={() => art.remove(l.id)} className="hover:!bg-red-500/10 hover:!text-red-300" />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Group>
+        {/* Floating tools */}
+        <div className="absolute inset-x-0 bottom-3 flex justify-center px-3">
+          <div className="flex max-w-full items-center gap-0.5 overflow-x-auto rounded-xl border border-white/15 bg-zinc-900/80 p-1 shadow-2xl shadow-black/40 backdrop-blur-xl" role="toolbar" aria-label="Layer tools">
+            <StudioButton variant="ghost" icon={Type} onClick={art.addText} className="whitespace-nowrap px-2.5 py-1.5 text-xs">
+              Text
+            </StudioButton>
+            <StudioButton variant="ghost" icon={art.uploading ? Loader2 : ImagePlus} loading={Boolean(art.uploading)} onClick={art.pickImages} className="whitespace-nowrap px-2.5 py-1.5 text-xs">
+              {art.uploading ? `${art.uploading.progress}%` : 'Image'}
+            </StudioButton>
+            {selected && (
+              <>
+                <span className="mx-1 h-5 w-px shrink-0 bg-white/15" aria-hidden="true" />
+                <IconButton icon={RotateCcw} label="Rotate left 15°" onClick={() => art.patchLayer(selected.id, { rotation: normRotation(rotation - 15) })} />
+                <span className="w-9 shrink-0 text-center font-mono text-[11px] text-zinc-300">{rotation}°</span>
+                <IconButton icon={RotateCw} label="Rotate right 15°" onClick={() => art.patchLayer(selected.id, { rotation: normRotation(rotation + 15) })} />
+                <IconButton icon={Crosshair} label="Centre on this side" onClick={() => art.patchLayer(selected.id, { x: 50, y: 50 })} />
+                <IconButton icon={Trash2} label="Delete layer" onClick={() => art.remove(selected.id)} className="hover:!bg-red-500/10 hover:!text-red-300" />
+              </>
+            )}
+          </div>
+        </div>
       </div>
     </Panel>
+  );
+}
+
+/** Artwork tab: the layer stack of the current side (top of list = drawn on top) with add buttons. */
+export function LayerList({ specs, side, selectedId, onSelect, art }) {
+  const sideLayers = allLayersOf(specs).filter((l) => l.side === side);
+  return (
+    <Group title={`Layers · ${SIDE_LABEL[side]}`}>
+      {sideLayers.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-white/10 px-3 py-4 text-center text-xs text-zinc-500">Nothing on this side yet.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {[...sideLayers].reverse().map((l) => (
+            <li key={l.id}>
+              <div
+                className={cx(
+                  'flex items-center gap-2.5 rounded-xl border px-2 py-1.5 transition',
+                  l.id === selectedId ? 'border-brand-400/60 bg-brand-500/10' : 'border-transparent bg-zinc-950/40 hover:border-white/10'
+                )}
+              >
+                <button type="button" onClick={() => onSelect(l.id)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
+                  <LayerThumb layer={l} />
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium text-zinc-100">{l.kind === 'image' ? 'Image' : l.text || '(empty text)'}</span>
+                    <span className="block text-[11px] text-zinc-500">
+                      {l.kind === 'image' ? `${Math.round(l.scale * 100)}% width` : `${l.font} · ${l.size}px`}
+                      {l.rotation ? ` · ${l.rotation}°` : ''}
+                    </span>
+                  </span>
+                </button>
+                <IconButton icon={Trash2} label="Delete layer" onClick={() => art.remove(l.id)} className="hover:!bg-red-500/10 hover:!text-red-300" />
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <AddButtons art={art} compact />
+      <p className="text-[11px] text-zinc-500">
+        PNG with a transparent background works best · max {MAX_MB} MB · up to {LIMITS.maxImages} images and {LIMITS.maxText} texts.
+      </p>
+    </Group>
   );
 }
 
@@ -226,16 +258,10 @@ export function LayerInspector({ specs, selectedId, art, onSideChange }) {
 
   if (!layer) {
     return (
-      <div className="space-y-4">
-        <div className="rounded-xl border border-dashed border-white/10 px-4 py-8 text-center">
-          <MousePointerClick className="mx-auto h-6 w-6 text-zinc-600" />
-          <p className="mt-2 text-sm font-medium text-zinc-300">No layer selected</p>
-          <p className="mt-1 text-xs text-zinc-500">Click a layer on the pattern, or add a new one to the current side.</p>
-        </div>
-        <AddButtons art={art} />
-        <p className="text-xs text-zinc-500">
-          PNG with a transparent background works best · max {MAX_MB} MB · up to {LIMITS.maxImages} images and {LIMITS.maxText} texts.
-        </p>
+      <div className="rounded-xl border border-dashed border-white/10 px-4 py-6 text-center">
+        <MousePointerClick className="mx-auto h-6 w-6 text-zinc-600" />
+        <p className="mt-2 text-sm font-medium text-zinc-300">No layer selected</p>
+        <p className="mt-1 text-xs text-zinc-500">Click a layer on the 2D editor or in the list above to edit it.</p>
       </div>
     );
   }
