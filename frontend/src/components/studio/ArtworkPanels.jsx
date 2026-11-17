@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import { Crosshair, ImagePlus, Loader2, MousePointerClick, PenTool, RotateCcw, RotateCw, Trash2, Type } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Crosshair, Hand, ImagePlus, Loader2, Maximize, Minus, MousePointer2, MousePointerClick, PenTool, Plus, RotateCcw, RotateCw, Scissors, Shirt, Trash2, Type } from 'lucide-react';
 import { uploadApi } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { cx } from '../ui';
@@ -152,53 +152,166 @@ function LayerThumb({ layer }) {
   );
 }
 
+const EDITOR_MODE_KEY = 'customt_editor_mode';
+const EDITOR_MODES = [
+  { value: 'pattern', label: 'Pattern', icon: Scissors },
+  { value: 'garment', label: 'Garment', icon: Shirt },
+];
+function loadEditorMode() {
+  try {
+    return localStorage.getItem(EDITOR_MODE_KEY) === 'garment' ? 'garment' : 'pattern';
+  } catch {
+    return 'pattern';
+  }
+}
+
+function RailButton({ icon: Icon, label, active, onClick, shortcut }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      aria-pressed={active}
+      title={shortcut ? `${label} (${shortcut})` : label}
+      className={cx(
+        'flex h-9 w-9 items-center justify-center rounded-lg transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400',
+        active ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/30' : 'text-zinc-300 hover:bg-white/10 hover:text-white'
+      )}
+    >
+      <Icon className="h-4 w-4" />
+    </button>
+  );
+}
+
 /**
- * 2D EDITOR (left half in split view): one side of the garment, drawn as large as the panel allows so
- * layers are easy to grab. Floating tools under the garment: add text/image and, for the selected layer,
- * rotate, centre and delete.
+ * 2D EDITOR (left half in split view).
+ *  Pattern mode (default): the garment cut into flat pieces (front, back, both sleeves). Click a piece to work
+ *    on it, drag layers, scroll to zoom, drag empty space (or use the hand tool) to pan.
+ *  Garment mode: one side of the assembled garment, as large as the panel allows.
+ * Both edit the same layers, so the 3D view always matches.
  */
 export function PatternEditor({ specs, side, onSideChange, selectedId, onSelect, onLayerMove, art, className, ...rest }) {
+  const preview = useRef(null);
+  const [mode, setModeState] = useState(loadEditorMode);
+  const [tool, setTool] = useState('select');
+  const [zoom, setZoom] = useState(1);
+  const pattern = mode === 'pattern';
   const layers = allLayersOf(specs);
   const counts = Object.fromEntries(SIDES.map((s) => [s, layers.filter((l) => l.side === s).length]));
-  const selected = layers.find((l) => l.id === selectedId && l.side === side);
+  const selected = layers.find((l) => l.id === selectedId && (pattern || l.side === side));
   const rotation = Number(selected?.rotation) || 0;
+
+  const setMode = (m) => {
+    setModeState(m);
+    try {
+      localStorage.setItem(EDITOR_MODE_KEY, m);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  // V = select, H = hand (pattern mode), like common design tools. Ignored while typing.
+  useEffect(() => {
+    if (!pattern) return undefined;
+    const onKey = (e) => {
+      const t = e.target;
+      if (e.ctrlKey || e.metaKey || e.altKey || (t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)))) return;
+      if (e.key === 'v' || e.key === 'V') setTool('select');
+      if (e.key === 'h' || e.key === 'H') setTool('hand');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pattern]);
 
   return (
     <Panel className={className} {...rest}>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.07] px-3 py-2.5">
-        <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
-          <PenTool className="h-3.5 w-3.5 text-brand-400" /> 2D editor
-        </h2>
-        <Segmented size="sm" label="Side" value={side} onChange={onSideChange} className="w-full sm:w-auto" options={SIDES.map((s) => ({ value: s, label: SHORT_LABEL[s], badge: counts[s] || null }))} />
+        <div className="flex items-center gap-3">
+          <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
+            <PenTool className="h-3.5 w-3.5 text-brand-400" /> 2D editor
+          </h2>
+          <Segmented size="sm" label="Editor view" value={mode} onChange={setMode} options={EDITOR_MODES} />
+        </div>
+        {pattern ? (
+          <span className="text-[11px] text-zinc-500">
+            4 pieces · working on <span className="font-semibold text-brand-300">{SIDE_LABEL[side]}</span>
+          </span>
+        ) : (
+          <Segmented size="sm" label="Side" value={side} onChange={onSideChange} className="w-full sm:w-auto" options={SIDES.map((s) => ({ value: s, label: SHORT_LABEL[s], badge: counts[s] || null }))} />
+        )}
       </div>
 
-      <div className="relative min-h-0 flex-1 bg-zinc-950 [background-image:radial-gradient(rgba(255,255,255,0.07)_1px,transparent_1px)] [background-size:16px_16px]">
-        <div className="absolute inset-0 px-3 pb-16 pt-3">
-          <TShirtPreview specs={specs} view={side} editable fit selectedId={selectedId} onSelect={onSelect} onLayerMove={onLayerMove} showPrintArea />
+      <div className="relative min-h-0 flex-1 overflow-hidden bg-zinc-950 [background-image:radial-gradient(rgba(255,255,255,0.07)_1px,transparent_1px)] [background-size:16px_16px]">
+        <div className={cx('absolute inset-0 pb-16 pt-3', pattern ? 'pl-14 pr-3' : 'px-3')}>
+          <TShirtPreview
+            ref={preview}
+            specs={specs}
+            view={side}
+            mode={mode}
+            activeSide={side}
+            onPieceSelect={onSideChange}
+            tool={tool}
+            onZoomChange={setZoom}
+            editable
+            fit
+            selectedId={selectedId}
+            onSelect={onSelect}
+            onLayerMove={onLayerMove}
+            showPrintArea
+          />
         </div>
-        <span className="pointer-events-none absolute left-3 top-3 rounded-md bg-zinc-900/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 ring-1 ring-white/10">
-          {SIDE_LABEL[side]}
-        </span>
+
+        {pattern ? (
+          <div className="absolute left-3 top-3 flex flex-col gap-1 rounded-xl border border-white/15 bg-zinc-900/80 p-1 shadow-2xl shadow-black/40 backdrop-blur-xl" role="toolbar" aria-label="Editor tools" aria-orientation="vertical">
+            <RailButton icon={MousePointer2} label="Select and move" shortcut="V" active={tool === 'select'} onClick={() => setTool('select')} />
+            <RailButton icon={Hand} label="Pan" shortcut="H" active={tool === 'hand'} onClick={() => setTool('hand')} />
+            <span className="mx-auto my-0.5 h-px w-5 bg-white/15" aria-hidden="true" />
+            <RailButton icon={Type} label={`Add text to ${SIDE_LABEL[side].toLowerCase()}`} onClick={art.addText} />
+            <RailButton icon={art.uploading ? Loader2 : ImagePlus} label={`Add image to ${SIDE_LABEL[side].toLowerCase()}`} onClick={art.pickImages} />
+          </div>
+        ) : (
+          <span className="pointer-events-none absolute left-3 top-3 rounded-md bg-zinc-900/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 ring-1 ring-white/10">
+            {SIDE_LABEL[side]}
+          </span>
+        )}
         <p className="pointer-events-none absolute right-3 top-3 hidden max-w-[15rem] text-right text-[11px] leading-snug text-zinc-500 lg:block">
-          Click a layer to select it, drag to move, arrow keys to nudge. Dashed box = printable area.
+          {pattern
+            ? 'Click a piece to work on it, drag layers to move. Scroll to zoom, drag empty space to pan.'
+            : 'Click a layer to select it, drag to move, arrow keys to nudge. Dashed box = printable area.'}
         </p>
 
         {/* Floating tools */}
         <div className="absolute inset-x-0 bottom-3 flex justify-center px-3">
           <div className="flex max-w-full items-center gap-0.5 overflow-x-auto rounded-xl border border-white/15 bg-zinc-900/80 p-1 shadow-2xl shadow-black/40 backdrop-blur-xl" role="toolbar" aria-label="Layer tools">
-            <StudioButton variant="ghost" icon={Type} onClick={art.addText} className="whitespace-nowrap px-2.5 py-1.5 text-xs">
-              Text
-            </StudioButton>
-            <StudioButton variant="ghost" icon={art.uploading ? Loader2 : ImagePlus} loading={Boolean(art.uploading)} onClick={art.pickImages} className="whitespace-nowrap px-2.5 py-1.5 text-xs">
-              {art.uploading ? `${art.uploading.progress}%` : 'Image'}
-            </StudioButton>
+            {pattern && (
+              <>
+                <IconButton icon={Minus} label="Zoom out" onClick={() => preview.current?.zoomOut()} />
+                <span className="w-11 shrink-0 text-center font-mono text-[11px] text-zinc-300" aria-live="polite">
+                  {Math.round(zoom * 100)}%
+                </span>
+                <IconButton icon={Plus} label="Zoom in" onClick={() => preview.current?.zoomIn()} />
+                <StudioButton variant="ghost" icon={Maximize} onClick={() => preview.current?.fit()} className="whitespace-nowrap px-2 py-1.5 text-xs">
+                  Fit
+                </StudioButton>
+              </>
+            )}
+            {!pattern && (
+              <>
+                <StudioButton variant="ghost" icon={Type} onClick={art.addText} className="whitespace-nowrap px-2.5 py-1.5 text-xs">
+                  Text
+                </StudioButton>
+                <StudioButton variant="ghost" icon={art.uploading ? Loader2 : ImagePlus} loading={Boolean(art.uploading)} onClick={art.pickImages} className="whitespace-nowrap px-2.5 py-1.5 text-xs">
+                  {art.uploading ? `${art.uploading.progress}%` : 'Image'}
+                </StudioButton>
+              </>
+            )}
             {selected && (
               <>
                 <span className="mx-1 h-5 w-px shrink-0 bg-white/15" aria-hidden="true" />
                 <IconButton icon={RotateCcw} label="Rotate left 15°" onClick={() => art.patchLayer(selected.id, { rotation: normRotation(rotation - 15) })} />
                 <span className="w-9 shrink-0 text-center font-mono text-[11px] text-zinc-300">{rotation}°</span>
                 <IconButton icon={RotateCw} label="Rotate right 15°" onClick={() => art.patchLayer(selected.id, { rotation: normRotation(rotation + 15) })} />
-                <IconButton icon={Crosshair} label="Centre on this side" onClick={() => art.patchLayer(selected.id, { x: 50, y: 50 })} />
+                <IconButton icon={Crosshair} label="Centre on this piece" onClick={() => art.patchLayer(selected.id, { x: 50, y: 50 })} />
                 <IconButton icon={Trash2} label="Delete layer" onClick={() => art.remove(selected.id)} className="hover:!bg-red-500/10 hover:!text-red-300" />
               </>
             )}
