@@ -6,7 +6,7 @@
  * rotation: degrees clockwise around the layer's centre, -180…180 (missing = 0)
  * side: 'front' | 'back' | 'leftSleeve' | 'rightSleeve'
  */
-import { SIDES } from './garmentGeometry';
+import { SIDES } from './garmentGeometry.js';
 
 export const FONTS = [
   { name: 'Bebas Neue', weight: 400, fallback: 'Impact, "Arial Narrow", sans-serif', label: 'Bebas Neue (bold block)' },

@@ -19,6 +19,8 @@ export const VIEW_W = 620;
 export const VIEW_H = 460;
 export const UNITS_PER_CM = 5.5;
 const RAW_CX = 200;
+/** Height (y) of the high point of the shoulder (where the neck meets the shoulder) per garment. */
+export const HPS_Y = { 'Crew Neck': 28, Polo: 28, Hoodie: 32, 'Short Sleeve Shirt': 28, 'Long Sleeve Shirt': 28 };
 const tx = (x) => VIEW_W / 2 + (x - RAW_CX) * KX;
 const round2 = (v) => Math.round(v * 100) / 100;
 
@@ -129,8 +131,9 @@ function transformArea(a) {
 const bodyArea = (cy, wCm, hCm) => ({ cx: VIEW_W / 2, cy, w: wCm * UNITS_PER_CM, h: hCm * UNITS_PER_CM, rotate: 0 });
 const BODY_AREAS = {
   'Crew Neck': { front: bodyArea(205, 30, 40), back: bodyArea(205, 30, 40) },
-  Polo: { front: bodyArea(240, 28, 30), back: bodyArea(210, 30, 40) },
-  Hoodie: { front: bodyArea(238, 28, 26), back: bodyArea(250, 32, 36) },
+  // Polo and hoodie fronts start at chest height, so a left-chest logo fits (hoodie ends above the pocket).
+  Polo: { front: bodyArea(205, 30, 40), back: bodyArea(210, 30, 40) },
+  Hoodie: { front: bodyArea(198, 30, 38), back: bodyArea(250, 32, 36) },
   'Short Sleeve Shirt': { front: bodyArea(215, 28, 36), back: bodyArea(240, 30, 40) },
   'Long Sleeve Shirt': { front: bodyArea(215, 28, 36), back: bodyArea(240, 30, 40) },
 };
