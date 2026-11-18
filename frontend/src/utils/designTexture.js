@@ -21,23 +21,44 @@ const path2d = (d) => {
   return pathCache.get(d);
 };
 
-/** Loads an image for canvas use. Resolves null (never rejects) so one broken image cannot block the model. */
+const loadOnce = (src) =>
+  new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous'; // required to paint it onto the 3D texture canvas
+    img.decoding = 'async';
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+
+/** True when the server says the file does not exist (as opposed to a network or CORS problem). */
+async function isMissing(url) {
+  try {
+    const res = await fetch(url, { method: 'HEAD', mode: 'cors', cache: 'no-store' });
+    return res.status === 404 || res.status === 410;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Loads an image for canvas use. Never rejects, so one broken image cannot block the model.
+ * Resolves { img } on success, or { img: null, missing } when it could not be loaded.
+ * If the first try fails (for example a copy cached earlier without CORS headers), it retries once with a
+ * cache-busting query so the browser fetches a fresh, CORS-enabled copy.
+ */
 export function loadImage(url) {
   if (!imageCache.has(url)) {
-    imageCache.set(
-      url,
-      new Promise((resolve) => {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.decoding = 'async';
-        img.onload = () => resolve(img);
-        img.onerror = () => {
-          imageCache.delete(url);
-          resolve(null);
-        };
-        img.src = url;
-      })
-    );
+    const job = (async () => {
+      const first = await loadOnce(url);
+      if (first) return { img: first };
+      if (!/^https?:/i.test(url)) return { img: null, missing: false };
+      const retry = await loadOnce(`${url}${url.includes('?') ? '&' : '?'}cors=1`);
+      if (retry) return { img: retry };
+      return { img: null, missing: await isMissing(url) };
+    })();
+    imageCache.set(url, job);
+    job.then((r) => !r.img && imageCache.delete(url)); // let a later repaint try again
   }
   return imageCache.get(url);
 }
@@ -187,9 +208,10 @@ export async function paintDesignTexture(canvas, specs) {
 
   const [, loaded] = await Promise.all([loadDesignFonts(specs), Promise.all([...new Set(imageLayers.map((l) => l.url))].map(async (url) => [url, await loadImage(url)]))]);
   const images = new Map();
-  for (const [url, img] of loaded) {
+  for (const [url, { img, missing }] of loaded) {
     if (img) images.set(url, img);
-    else warnings.add('One of the uploaded images could not be loaded for the 3D view. It is still part of your design.');
+    else if (missing) warnings.add('An uploaded image is no longer on the server. Please delete that layer and upload the image again.');
+    else warnings.add('An uploaded image could not be loaded for the 3D view (check your connection). It is still part of your design.');
   }
 
   if (canvas.width !== TEXTURE_WIDTH) canvas.width = TEXTURE_WIDTH;

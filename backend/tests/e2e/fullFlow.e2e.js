@@ -1028,3 +1028,43 @@ test('Facebook Login: CSRF-checked callback, sign-up with phone, one-time login 
     facebookAuth._setGraphClient(null);
   }
 });
+
+// ── 24. Uploaded images survive a server restart and can always be painted on the 3D model ──
+test('uploads: images are kept in the database, served after the disk copy is lost, always with open CORS', async () => {
+  const sharp = require('sharp');
+  const fsp = require('fs/promises');
+  const path = require('path');
+  const { config } = require('../../config/env');
+  const png = await sharp({ create: { width: 40, height: 30, channels: 4, background: '#22c55e' } }).png().toBuffer();
+  const form = new FormData();
+  form.append('logo', new Blob([png], { type: 'image/png' }), 'logo.png');
+  const res = await fetch(`${BASE}/api/uploads/logo`, { method: 'POST', headers: { authorization: `Bearer ${S.buyer}` }, body: form });
+  assert.equal(res.status, 201);
+  const { path: filePath } = await res.json();
+  const filename = filePath.split('/').pop();
+
+  const get = (p, headers = {}) => fetch(`${BASE}${p}`, { headers });
+  // 2D preview style (no Origin) and 3D painter style (Origin): both carry Access-Control-Allow-Origin: *.
+  const plain = await get(filePath);
+  assert.equal(plain.status, 200);
+  assert.equal(plain.headers.get('access-control-allow-origin'), '*');
+  const cors = await get(filePath, { origin: 'https://customt.vercel.app' });
+  assert.equal(cors.headers.get('access-control-allow-origin'), '*');
+  assert.deepEqual(Buffer.from(await cors.arrayBuffer()), png);
+
+  // The host wipes its disk (restart / wake-up): the file is served from MongoDB, then cached on disk again.
+  await fsp.unlink(path.join(config.uploadDir, 'logos', filename));
+  const restored = await get(filePath, { origin: 'https://customt.vercel.app' });
+  assert.equal(restored.status, 200);
+  assert.equal(restored.headers.get('content-type'), 'image/png');
+  assert.equal(restored.headers.get('access-control-allow-origin'), '*');
+  assert.deepEqual(Buffer.from(await restored.arrayBuffer()), png);
+  await new Promise((r) => setTimeout(r, 200));
+  assert.ok(await fsp.stat(path.join(config.uploadDir, 'logos', filename)), 'disk cache restored');
+
+  // Unknown or malformed names are a plain 404 (still with CORS, so the 3D view can report it cleanly).
+  const missing = await get('/uploads/logos/0123456789abcdef01234567-1731480000000-deadbeef.png');
+  assert.equal(missing.status, 404);
+  assert.equal(missing.headers.get('access-control-allow-origin'), '*');
+  assert.equal((await get('/uploads/logos/..%2F..%2Fserver.js')).status, 404);
+});

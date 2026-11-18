@@ -6,6 +6,7 @@ const { protect, authorize } = require('../middleware/auth');
 const { logoUpload } = require('../middleware/upload');
 const { ROLES } = require('../config/constants');
 const { config } = require('../config/env');
+const StoredUpload = require('../models/StoredUpload');
 
 const router = express.Router();
 
@@ -63,7 +64,11 @@ router.post('/logo', protect, authorize(ROLES.BUYER, ROLES.VENDOR, ROLES.ADMIN),
         await fs.unlink(req.file.path).catch(() => {});
         return next(ApiError.badRequest('The file content is not a valid PNG, JPG, WEBP or SVG image'));
       }
+      // Keep a copy in the database: the disk copy may not survive a server restart (see StoredUpload).
+      const data = await fs.readFile(req.file.path);
+      await StoredUpload.create({ filename: req.file.filename, ownerId: req.user._id, contentType: req.file.mimetype, size: data.length, data });
     } catch (checkErr) {
+      await fs.unlink(req.file.path).catch(() => {});
       return next(checkErr);
     }
     const path = `/uploads/logos/${req.file.filename}`;
