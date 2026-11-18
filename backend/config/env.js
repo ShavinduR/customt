@@ -37,6 +37,12 @@ const config = {
     .split(',')
     .map((url) => url.trim())
     .filter(Boolean),
+  // The Android app (Capacitor) loads its bundled files from https://localhost, so that origin must be allowed
+  // to call the API. Override with NATIVE_APP_ORIGINS (comma-separated); set it to "" to block the app.
+  nativeAppOrigins: (process.env.NATIVE_APP_ORIGINS ?? 'https://localhost')
+    .split(',')
+    .map((url) => url.trim())
+    .filter(Boolean),
   publicApiUrl: (process.env.PUBLIC_API_URL || '').replace(/\/+$/, ''),
   auctionDurationMinutes: toInt(process.env.AUCTION_DURATION_MINUTES, 24 * 60),
   auctionSchedulerIntervalMs: toInt(process.env.AUCTION_SCHEDULER_INTERVAL_MS, 10000),

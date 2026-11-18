@@ -7,7 +7,7 @@ CustomT ships as **one React code base** for the web, an installable app (PWA), 
 | Android (Chrome, Edge, Samsung Internet) | Install from the browser (PWA) | ✅ Step 1 |
 | iPhone / iPad (Safari) | Share → **Add to Home Screen** (PWA) | ✅ Step 1 |
 | Windows, macOS, ChromeOS, Linux (Chrome / Edge) | Install icon in the address bar, or **Install CustomT app** in the user menu | ✅ Step 1 |
-| Android APK (sideload for demos) | Capacitor wrapper, built by GitHub Actions | ⏳ Step 2 |
+| Android app (APK) | Capacitor wrapper, built by GitHub Actions | ✅ Step 2 |
 
 ## Step 1: installable app (PWA)
 
@@ -37,11 +37,49 @@ CustomT ships as **one React code base** for the web, an installable app (PWA), 
 - **`vercel.json`** serves `sw.js` and the manifest with `Cache-Control: no-cache`, so updates are picked up. The existing CSP already allows the worker (`worker-src 'self'`).
 - **Icons** (`frontend/public/icons/`) are rendered from the CustomT logo: 192/512 px, a 512 px *maskable* icon for Android's adaptive shapes, and a 180 px Apple touch icon.
 
-## Step 2: Android APK (planned)
-- **Capacitor** wraps the same production build in a native Android app (`frontend/android`).
-- **GitHub Actions** builds a **debug-signed APK** on every push to `main` and attaches it as a downloadable artifact. No Android Studio is needed on your computer.
-- **Install** the APK on any Android phone (allow *Install unknown apps*) for demos and the viva. Publishing on Google Play later needs a developer account (US$25 once) and a release signing key.
-- **Things to handle in that step:**
-  - the API's CORS allow-list must include the app's origin (`https://localhost` in Capacitor);
-  - Facebook Login must return to the app (Android App Link or custom scheme);
-  - the status-bar colour and the back button need native handling.
+## Step 2: Android app (APK)
+
+The same production build, wrapped by **Capacitor 8** into a native Android app (`frontend/android`, app id `lk.customt.app`, Android 7.0+). It uses the same live API, auctions, escrow and design studio as the website.
+
+### Get the APK
+1. **Every push to `main`** that touches `frontend/` runs **GitHub Actions → "Android APK"**, which:
+   - builds the APK;
+   - publishes it on the **`android-latest` pre-release:** GitHub → *Releases* → **Android app (latest)** → `CustomT-1.0.<run>-debug.apk`.
+2. **Install:** open that link on the phone, download the APK, tap it and allow **Install unknown apps** for the browser when Android asks.
+3. **Updates:** the debug APK is signed with a new key on every build, so **uninstall the old CustomT first**. To install updates in place, add a signing key (below).
+
+Pull requests also build the APK; it is attached to the workflow run as an artifact.
+
+### Optional: your own signing key (updates install in place, needed for Google Play later)
+1. Create a key once on your computer:
+   ```
+   keytool -genkeypair -v -keystore customt.keystore -alias customt -keyalg RSA -keysize 2048 -validity 10000
+   ```
+2. Keep `customt.keystore` and its passwords safe. **Losing it means you can never update the app.**
+3. In GitHub → *Settings → Secrets and variables → Actions*, add:
+   - `ANDROID_KEYSTORE_BASE64` (the output of `base64 -w0 customt.keystore`);
+   - `ANDROID_KEYSTORE_PASSWORD`;
+   - `ANDROID_KEY_ALIAS` (`customt`);
+   - `ANDROID_KEY_PASSWORD`.
+4. The workflow then also builds `CustomT-1.0.<run>.apk`, a release APK signed with that key.
+
+### What is different inside the app
+- **Built with `vite build --mode android`** (`frontend/.env.android`):
+  - the API address is the live Render API;
+  - there is no service worker, because every file is already inside the APK (updates come with a new APK).
+- **Native touches** (`frontend/src/native/platform.js`):
+  - the Android **back button** goes back through pages and closes the app on the first one;
+  - the status bar is white with dark icons;
+  - the launcher icon and splash screen are CustomT's (`frontend/assets/` → `npx @capacitor/assets generate --android`).
+- **PDF receipts** open Android's **share / save sheet** (Save to Files, Drive, WhatsApp, e-mail), because a WebView cannot download files like a browser.
+- **Facebook Login is hidden in the app.** Facebook's sign-in page would return to the browser, not to the app. Users sign in with e-mail; an account created with Facebook can add a password on the website's *Account* page. (A future step can add an Android App Link for Facebook.)
+- **The backend allows the app's origin `https://localhost`** in CORS and Socket.IO (`NATIVE_APP_ORIGINS`, default `https://localhost`).
+
+### Build it yourself (optional)
+You need Node 22, JDK 21 and the Android SDK (Android Studio installs it). Then:
+```
+cd frontend
+npm run build:android
+npm run android:apk
+```
+The first command builds the web app and copies it into `android/`. The second builds `android/app/build/outputs/apk/debug/app-debug.apk`. You can also open `frontend/android` in Android Studio and press *Run*.

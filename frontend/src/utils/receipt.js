@@ -4,6 +4,7 @@
  *
  * Works for any viewer (buyer, vendor, admin) from a populated order: buyerId and vendorId as objects.
  */
+import { saveGeneratedFile } from '../native/platform';
 
 const BRAND = [79, 70, 229];
 const INK = [23, 23, 28];
@@ -217,5 +218,7 @@ export async function downloadOrderReceipt(order) {
   }
 
   doc.setProperties({ title: `CustomT receipt ${order.orderCode}`, subject: 'Escrow payment receipt', creator: 'CustomT' });
-  doc.save(`CustomT-receipt-${order.orderCode}.pdf`);
+  const filename = `CustomT-receipt-${order.orderCode}.pdf`;
+  // Browser: normal download. Android app: Android's share/save sheet (see native/platform.js).
+  return saveGeneratedFile({ filename, mimeType: 'application/pdf', base64: doc.output('datauristring').split(',')[1], fallback: () => doc.save(filename) });
 }
