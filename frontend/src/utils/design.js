@@ -21,8 +21,21 @@ export const fontWeight = (name) => (FONT_BY_NAME[name] || FONTS[0]).weight;
 
 /** Average glyph width per font (fraction of the font size), used to estimate a text layer's width. */
 export const FONT_WIDTH = { 'Bebas Neue': 0.45, Montserrat: 0.74, 'Playfair Display': 0.6, Pacifico: 0.58 };
-/** Approximate printed extent of a text layer in design units (capital height ~0.72 of the font size). */
-export const textExtent = (layer) => ({ w: Math.max(8, layer.size * (FONT_WIDTH[layer.font] || 0.6) * layer.text.length), h: layer.size * 0.72 });
+let measureCtx = null;
+/**
+ * Printed extent of a text layer in design units. Measured with the real font in the browser (canvas
+ * measureText); estimated from average glyph widths elsewhere (Node, or before a canvas exists).
+ */
+export function textExtent(layer) {
+  const estimate = { w: Math.max(8, layer.size * (FONT_WIDTH[layer.font] || 0.6) * layer.text.length), h: layer.size * 0.72 };
+  if (typeof document === 'undefined' || !layer.text) return estimate;
+  measureCtx = measureCtx || document.createElement('canvas').getContext('2d');
+  if (!measureCtx) return estimate;
+  measureCtx.font = `${fontWeight(layer.font)} ${layer.size}px ${fontFamily(layer.font)}`;
+  const m = measureCtx.measureText(layer.text);
+  const h = (m.actualBoundingBoxAscent || 0) + (m.actualBoundingBoxDescent || 0);
+  return m.width ? { w: m.width, h: h || estimate.h } : estimate;
+}
 
 export const LIMITS = { maxText: 8, maxImages: 8, textMax: 60, sizeMin: 6, sizeMax: 96, scaleMin: 0.1, scaleMax: 1, rotationMin: -180, rotationMax: 180 };
 

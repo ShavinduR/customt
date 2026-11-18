@@ -26,6 +26,7 @@ import OrderProgress from '../../components/orders/OrderProgress';
 import EscrowBreakdown from '../../components/orders/EscrowBreakdown';
 import DisputeThread from '../../components/orders/DisputeThread';
 import SpecSummary from '../../components/auction/SpecSummary';
+import ProductionPackCard from '../../components/orders/ProductionPackCard';
 import ReceiptButton from '../../components/orders/ReceiptButton';
 import OrderChat from '../../components/chat/OrderChat';
 import OtpInput from '../../components/vendor/OtpInput';
@@ -373,10 +374,11 @@ export default function VendorOrderDetail() {
             <Card>
               <CardHeader title="Locked specification" subtitle="Produce exactly to this spec" />
               <div className="p-5">
-                <SpecSummary specs={rfq.designSpecs} expectedDeliveryDays={rfq.expectedDeliveryDays} />
+                <SpecSummary specs={rfq.designSpecs} expectedDeliveryDays={rfq.expectedDeliveryDays} meta={{ code: rfq.rfqCode, title: rfq.title, description: rfq.description }} />
               </div>
             </Card>
           )}
+          {rfq && <ProductionPackCard order={order} rfq={rfq} role="vendor" />}
 
           <Card>
             <CardHeader icon={History} title="Timeline" />

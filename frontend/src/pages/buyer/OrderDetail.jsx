@@ -30,6 +30,7 @@ import RatingModal from '../../components/orders/RatingModal';
 import ReceiptButton from '../../components/orders/ReceiptButton';
 import OrderChat from '../../components/chat/OrderChat';
 import SpecSummary from '../../components/auction/SpecSummary';
+import ProductionPackCard from '../../components/orders/ProductionPackCard';
 import { Alert, Badge, Button, Card, CardHeader, ErrorList, Modal, PageHeader, PageLoader, StatusBadge, TrustStars } from '../../components/ui';
 import { formatDate, formatLKR, titleCase } from '../../utils/format';
 import { statusMeta } from '../../utils/status';
@@ -273,10 +274,11 @@ export default function OrderDetail() {
             <Card>
               <CardHeader title="Locked specification" />
               <div className="p-5">
-                <SpecSummary specs={rfq.designSpecs} expectedDeliveryDays={rfq.expectedDeliveryDays} />
+                <SpecSummary specs={rfq.designSpecs} expectedDeliveryDays={rfq.expectedDeliveryDays} meta={{ code: rfq.rfqCode, title: rfq.title, description: rfq.description }} />
               </div>
             </Card>
           )}
+          {rfq && <ProductionPackCard order={order} rfq={rfq} role="buyer" />}
 
           <Card>
             <CardHeader icon={History} title="Timeline" />

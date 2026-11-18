@@ -1,15 +1,30 @@
 import { Suspense, lazy, useState } from 'react';
-import { Box, Image as ImageIcon, Lock, Type } from 'lucide-react';
+import { Box, FileText, Image as ImageIcon, Lock, Type } from 'lucide-react';
 import TShirtPreview from '../configurator/TShirtPreview';
 import { Badge, Button, Modal, Spinner } from '../ui';
 import { SIDE_LABEL } from '../../utils/garmentGeometry';
 import { fontFamily, fontWeight, layersOf, printedSides } from '../../utils/design';
+import { useToast } from '../../context/ToastContext';
 
 const Shirt3DViewer = lazy(() => import('../configurator/Shirt3DViewer'));
 
 /** Read-only locked specification card (RFQ detail & order pages). */
-export default function SpecSummary({ specs, expectedDeliveryDays, isLocked = true, compact = false }) {
+export default function SpecSummary({ specs, expectedDeliveryDays, isLocked = true, compact = false, meta }) {
   const [open3d, setOpen3d] = useState(false);
+  const [sheetBusy, setSheetBusy] = useState(false);
+  const toast = useToast();
+  // Spec sheet PDF: the production facts (sizes, positions in cm, colours) every bidding printer quotes on.
+  const downloadSheet = async () => {
+    setSheetBusy(true);
+    try {
+      const { downloadSpecSheet } = await import('../../utils/productionPack');
+      await downloadSpecSheet(specs, { expectedDeliveryDays, ...meta });
+    } catch (err) {
+      toast.error(err.message || 'Could not create the spec sheet.');
+    } finally {
+      setSheetBusy(false);
+    }
+  };
   if (!specs) return null;
   const sides = printedSides(specs);
   const { textLayers, imageLayers } = layersOf(specs);
@@ -109,6 +124,9 @@ export default function SpecSummary({ specs, expectedDeliveryDays, isLocked = tr
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <Button variant="secondary" size="sm" icon={Box} onClick={() => setOpen3d(true)}>
               View in 3D
+            </Button>
+            <Button variant="secondary" size="sm" icon={FileText} loading={sheetBusy} onClick={downloadSheet}>
+              Spec sheet (PDF)
             </Button>
             {isLocked && (
               <Badge tone="slate" icon={Lock}>

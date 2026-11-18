@@ -8,6 +8,7 @@ import OrderProgress from '../../components/orders/OrderProgress';
 import EscrowBreakdown from '../../components/orders/EscrowBreakdown';
 import DisputeThread from '../../components/orders/DisputeThread';
 import SpecSummary from '../../components/auction/SpecSummary';
+import ProductionPackCard from '../../components/orders/ProductionPackCard';
 import ReceiptButton from '../../components/orders/ReceiptButton';
 import OrderChat from '../../components/chat/OrderChat';
 import { Alert, Badge, Button, Card, CardHeader, ErrorList, Field, Modal, PageHeader, PageLoader, StatusBadge, Textarea, TrustStars, cx } from '../../components/ui';
@@ -282,10 +283,11 @@ export default function AdminOrderDetail() {
             <Card>
               <CardHeader title="Locked specification" />
               <div className="p-5">
-                <SpecSummary specs={rfq.rfq.designSpecs} expectedDeliveryDays={rfq.rfq.expectedDeliveryDays} />
+                <SpecSummary specs={rfq.rfq.designSpecs} expectedDeliveryDays={rfq.rfq.expectedDeliveryDays} meta={{ code: rfq.rfq.rfqCode, title: rfq.rfq.title, description: rfq.rfq.description }} />
               </div>
             </Card>
           )}
+          {rfq?.rfq && <ProductionPackCard order={order} rfq={rfq.rfq} role="admin" />}
           <Card>
             <CardHeader icon={History} title="Timeline" />
             <ol className="space-y-3 p-5">
