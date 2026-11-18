@@ -7,5 +7,6 @@ const Post = require('./Post');
 const VendorApplication = require('./VendorApplication');
 const KybAccessLog = require('./KybAccessLog');
 const AuthTicket = require('./AuthTicket');
+const StoredUpload = require('./StoredUpload');
 
-module.exports = { User, RFQ, Bid, Order, Message, Post, VendorApplication, KybAccessLog, AuthTicket };
+module.exports = { User, RFQ, Bid, Order, Message, Post, VendorApplication, KybAccessLog, AuthTicket, StoredUpload };

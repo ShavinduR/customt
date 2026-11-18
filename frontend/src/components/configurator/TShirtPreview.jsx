@@ -236,6 +236,8 @@ const TShirtPreview = forwardRef(function TShirtPreview(
     if (layer.kind === 'image') {
       const size = layer.scale * area.w;
       box = { x: cx - size / 2, y: cy - size / 2, w: size, h: size };
+      // No crossOrigin here on purpose: the 2D view must show the image even if a cached copy lacks CORS headers.
+      // The 3D painter needs CORS and retries with a fresh copy itself (utils/designTexture.js).
       content = <image href={layer.url} x={box.x} y={box.y} width={size} height={size} preserveAspectRatio="xMidYMid meet" />;
     } else {
       const width = Math.max(8, layer.size * (FONT_WIDTH[layer.font] || 0.6) * layer.text.length);
