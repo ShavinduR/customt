@@ -1036,9 +1036,11 @@ test('uploads: images are kept in the database, served after the disk copy is lo
   const path = require('path');
   const { config } = require('../../config/env');
   const png = await sharp({ create: { width: 40, height: 30, channels: 4, background: '#22c55e' } }).png().toBuffer();
+  // A fresh account: earlier tests end some sessions, so shared tokens may no longer be valid here.
+  const { token } = await ok('POST', '/auth/register', null, { name: 'Upload Tester', email: 'uploads@e2e.test', password: 'Buyer1234', phone: '+94771119999' });
   const form = new FormData();
   form.append('logo', new Blob([png], { type: 'image/png' }), 'logo.png');
-  const res = await fetch(`${BASE}/api/uploads/logo`, { method: 'POST', headers: { authorization: `Bearer ${S.buyer}` }, body: form });
+  const res = await fetch(`${BASE}/api/uploads/logo`, { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: form });
   assert.equal(res.status, 201);
   const { path: filePath } = await res.json();
   const filename = filePath.split('/').pop();
