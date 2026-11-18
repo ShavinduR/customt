@@ -1,0 +1,101 @@
+name: Android APK
+
+# Builds the CustomT Android app (Capacitor) from the same React code as the website.
+#  - Every run uploads the APK as a workflow artifact.
+#  - Pushes to main also publish it on the "Android app (latest)" pre-release, so it can be downloaded
+#    on a phone without signing in to GitHub: Releases → android-latest → CustomT-<version>.apk
+# See docs/MOBILE_DESKTOP_APPS.md.
+
+on:
+  push:
+    branches: [main]
+    paths: ['frontend/**', '.github/workflows/android.yml']
+  pull_request:
+    paths: ['frontend/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write # only used on main, to update the android-latest pre-release
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    name: Android · build APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      VERSION_NAME: 1.0.${{ github.run_number }}
+      HAS_KEY: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - name: Android SDK platform 36
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-36" > /dev/null
+
+      - run: npm ci
+      - name: Build the web app for Android and copy it into the native project
+        run: npm run build:android
+
+      - name: Build debug APK
+        working-directory: frontend/android
+        run: ./gradlew assembleDebug --no-daemon -PversionCode=${{ github.run_number }} -PversionName=$VERSION_NAME
+
+      # Optional: a release APK signed with your own key installs as an UPDATE over the previous one.
+      # Add the secrets ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD.
+      - name: Build signed release APK (when a signing key is configured)
+        if: ${{ env.HAS_KEY == 'true' }}
+        working-directory: frontend/android
+        env:
+          CUSTOMT_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          CUSTOMT_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          CUSTOMT_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/customt.keystore"
+          CUSTOMT_KEYSTORE_FILE="$RUNNER_TEMP/customt.keystore" ./gradlew assembleRelease --no-daemon -PversionCode=${{ github.run_number }} -PversionName=$VERSION_NAME
+          rm -f "$RUNNER_TEMP/customt.keystore"
+
+      - name: Collect APKs
+        run: |
+          mkdir -p ../apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk "../apk/CustomT-$VERSION_NAME-debug.apk"
+          if [ -f android/app/build/outputs/apk/release/app-release.apk ]; then
+            cp android/app/build/outputs/apk/release/app-release.apk "../apk/CustomT-$VERSION_NAME.apk"
+          fi
+          ls -la ../apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CustomT-android-${{ env.VERSION_NAME }}
+          path: apk/*.apk
+          if-no-files-found: error
+
+      - name: Publish to the android-latest pre-release (main only)
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="Latest Android build of CustomT ($VERSION_NAME, commit ${GITHUB_SHA::7}). Install: download the APK on your phone, open it, allow 'Install unknown apps' if asked. The debug APK is signed with a new key on every build: uninstall the previous CustomT first."
+          if gh release view android-latest > /dev/null 2>&1; then
+            gh release edit android-latest --title "Android app (latest)" --notes "$NOTES" --prerelease
+          else
+            gh release create android-latest --title "Android app (latest)" --notes "$NOTES" --prerelease --target "$GITHUB_SHA"
+          fi
+          # Replace the previous APKs with this build's.
+          for old in $(gh release view android-latest --json assets --jq '.assets[].name'); do gh release delete-asset android-latest "$old" --yes; done
+          gh release upload android-latest apk/*.apk --clobber

@@ -3,12 +3,15 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     tailwindcss(),
     // Installable app (PWA): Android, iPhone, Windows, macOS, ChromeOS. See docs/MOBILE_DESKTOP_APPS.md.
     VitePWA({
+      // The Android app (Capacitor, `--mode android`) already ships every file inside the APK, so it gets no
+      // service worker: updates come with a new APK and nothing can serve a stale bundle.
+      disable: mode === 'android',
       registerType: 'prompt', // never reload under the user's feet: they choose when to update
       injectRegister: false, // registered from React (components/pwa/PwaPrompts.jsx)
       includeAssets: ['favicon.svg', 'icons/apple-touch-icon.png'],
@@ -71,4 +74,4 @@ export default defineConfig({
     // The lazily loaded 3D viewer (three.js) is ~940 kB raw / ~255 kB gzip and only downloads on demand.
     chunkSizeWarningLimit: 1000,
   },
-});
+}));

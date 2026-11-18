@@ -45,6 +45,7 @@ git push -u origin main
 |---|---|
 | `MONGO_URI` | the Atlas string from step 1 |
 | `CLIENT_URL` | your frontend URL from step 4, e.g. `https://customt.vercel.app` (no trailing slash; comma-separate several) |
+| `NATIVE_APP_ORIGINS` | optional. Origins of the mobile app allowed to call the API; default `https://localhost` (the Android app). Set it to an empty value to block the app. See `docs/MOBILE_DESKTOP_APPS.md` |
 | `PUBLIC_API_URL` | the Render URL, e.g. `https://customt-api.onrender.com` |
 
 `JWT_SECRET` is generated automatically. The blueprint uses Render's **free** plan, with no persistent disk, so uploaded logos are lost on each redeploy (see *Uploads* below). To stay always on, change `plan: free` to `plan: starter`.

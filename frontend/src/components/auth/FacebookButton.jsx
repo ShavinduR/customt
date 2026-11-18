@@ -1,6 +1,7 @@
 import { useCatalog } from '../../context/CatalogContext';
 import { facebookLoginUrl } from '../../api/client';
 import { cx } from '../ui';
+import { isNativeApp } from '../../native/platform';
 
 function FacebookLogo({ className }) {
   return (
@@ -15,8 +16,10 @@ function FacebookLogo({ className }) {
  * No Facebook script is loaded in the page. Hidden when Facebook Login isn't configured on the server.
  */
 export default function FacebookButton({ label = 'Continue with Facebook', className }) {
+  // Facebook's sign-in page would return to the browser, not to the Android app, so the app offers e-mail
+  // sign-in only (a Facebook-linked account can add a password on the website's Account page).
   const { catalog } = useCatalog();
-  if (!catalog?.auth?.facebook) return null;
+  if (isNativeApp || !catalog?.auth?.facebook) return null;
   return (
     <>
       <a

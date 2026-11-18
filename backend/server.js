@@ -32,9 +32,12 @@ const storefrontRoutes = require('./routes/storefrontRoutes');
 const kybRoutes = require('./routes/kybRoutes');
 const adminKybRoutes = require('./routes/adminKybRoutes');
 
+/** Browser origins allowed to call the API: the web frontends (CLIENT_URL) and the Android app. */
+const allowedOrigins = () => [...config.clientUrls, ...config.nativeAppOrigins];
+
 function corsOrigin(origin, callback) {
   // Allow same-origin / server-to-server requests (no Origin header) and configured frontends.
-  if (!origin || config.clientUrls.includes(origin)) return callback(null, true);
+  if (!origin || allowedOrigins().includes(origin)) return callback(null, true);
   return callback(new Error(`Origin ${origin} is not allowed by CORS`));
 }
 
@@ -96,7 +99,7 @@ function createApp() {
 function createRealtimeServer(app) {
   const server = http.createServer(app);
   const io = new Server(server, {
-    cors: { origin: config.clientUrls, credentials: true },
+    cors: { origin: allowedOrigins(), credentials: true },
     pingInterval: 20000,
     pingTimeout: 20000,
   });
@@ -116,7 +119,7 @@ async function start() {
     // eslint-disable-next-line no-console
     console.log(`[server] CustomT API + Socket.IO listening on port ${config.port} (${config.nodeEnv})`);
     // eslint-disable-next-line no-console
-    console.log(`[server] Allowed client origins: ${config.clientUrls.join(', ')}`);
+    console.log(`[server] Allowed client origins: ${allowedOrigins().join(', ')}`);
   });
 
   startAuctionScheduler();
