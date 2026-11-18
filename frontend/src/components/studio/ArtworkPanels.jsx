@@ -5,6 +5,7 @@ import { useToast } from '../../context/ToastContext';
 import { cx } from '../ui';
 import TShirtPreview from '../configurator/TShirtPreview';
 import Rulers from './Rulers';
+import { PlacementGrid, PlacementMenu } from './Placements';
 import { BODY, PRINT_AREAS, SIDES, SIDE_LABEL } from '../../utils/garmentGeometry';
 import { UNITS, formatLength, formatSize } from '../../utils/units';
 import { FONTS, LIMITS, defaultTextSize, fontFamily, fontWeight, newLayerId, normRotation, textExtent } from '../../utils/design';
@@ -329,6 +330,15 @@ export function PatternEditor({ specs, side, onSideChange, selectedId, onSelect,
             {selected && (
               <>
                 <span className="mx-1 h-5 w-px shrink-0 bg-white/15" aria-hidden="true" />
+                <PlacementMenu
+                  specs={specs}
+                  layer={selected}
+                  units={units}
+                  onApply={(p) => {
+                    art.patchLayer(selected.id, p.patch);
+                    onSideChange(p.side);
+                  }}
+                />
                 <IconButton icon={RotateCcw} label="Rotate left 15°" onClick={() => art.patchLayer(selected.id, { rotation: normRotation(rotation - 15) })} />
                 <span className="w-9 shrink-0 text-center font-mono text-[11px] text-zinc-300">{rotation}°</span>
                 <IconButton icon={RotateCw} label="Rotate right 15°" onClick={() => art.patchLayer(selected.id, { rotation: normRotation(rotation + 15) })} />
@@ -421,6 +431,18 @@ export function LayerInspector({ specs, selectedId, art, onSideChange, units = '
           Delete
         </StudioButton>
       </div>
+
+      <Group title="Placement" hint="Standard print positions. The layer moves to that spot and is resized to the printed width shown.">
+        <PlacementGrid
+          specs={specs}
+          layer={layer}
+          units={units}
+          onApply={(p) => {
+            art.patchLayer(layer.id, p.patch);
+            onSideChange(p.side);
+          }}
+        />
+      </Group>
 
       {layer.kind === 'text' && (
         <>
