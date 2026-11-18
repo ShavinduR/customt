@@ -104,7 +104,8 @@ function fabricPattern(ctx, fabric) {
   return ctx.createPattern(tile, 'repeat');
 }
 
-function drawLayer(ctx, layer, area, printType, images, warnings) {
+/** Draws one layer in print-area coordinates. printType adds preview effects (shadow, sheen); pass null for clean print artwork. */
+export function drawLayer(ctx, layer, area, printType, images, warnings) {
   const cx = (layer.x / 100) * area.w;
   const cy = (layer.y / 100) * area.h;
   ctx.save();

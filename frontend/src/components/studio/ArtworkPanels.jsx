@@ -397,7 +397,7 @@ export function LayerList({ specs, side, selectedId, onSelect, art }) {
 /**
  * RIGHT PANEL, "Artwork" tab: properties of the selected layer (content, size, colour, ROTATION, position).
  */
-export function LayerInspector({ specs, selectedId, art, onSideChange, units = 'cm' }) {
+export function LayerInspector({ specs, selectedId, art, onSideChange, units = 'cm', printCheck }) {
   const layer = allLayersOf(specs).find((l) => l.id === selectedId);
 
   if (!layer) {
@@ -555,6 +555,20 @@ export function LayerInspector({ specs, selectedId, art, onSideChange, units = '
           <span className="text-zinc-400">Print size</span>
           <span className="font-mono font-semibold text-brand-200">{printSize}</span>
         </div>
+        {layer.kind === 'image' && printCheck?.quality?.[layer.id] && (
+          <div
+            className={cx(
+              'flex items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-xs ring-1',
+              { good: 'bg-emerald-400/10 ring-emerald-400/20', ok: 'bg-emerald-400/10 ring-emerald-400/20', warn: 'bg-amber-400/10 ring-amber-400/25', bad: 'bg-red-500/10 ring-red-400/25' }[printCheck.quality[layer.id].level]
+            )}
+            title="Resolution of the picture at its real printed size. 200+ DPI prints sharp; below 100 DPI looks blurry."
+          >
+            <span className="text-zinc-400">Print quality</span>
+            <span className={cx('font-semibold', { good: 'text-emerald-200', ok: 'text-emerald-200', warn: 'text-amber-200', bad: 'text-red-200' }[printCheck.quality[layer.id].level])}>
+              {printCheck.quality[layer.id].label}
+            </span>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-2 font-mono text-xs">
           {['x', 'y'].map((axis) => (
             <div key={axis} className="flex items-center justify-between rounded-lg bg-zinc-950/60 px-2.5 py-1.5 ring-1 ring-white/[0.06]">

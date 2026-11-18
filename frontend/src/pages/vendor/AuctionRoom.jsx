@@ -288,7 +288,7 @@ export default function AuctionRoom() {
         <Card>
           <CardHeader icon={Package} title="Technical specification" subtitle="Locked: it will not change after you bid" />
           <div className="p-5">
-            <SpecSummary specs={rfq.designSpecs} expectedDeliveryDays={rfq.expectedDeliveryDays} />
+            <SpecSummary specs={rfq.designSpecs} expectedDeliveryDays={rfq.expectedDeliveryDays} meta={{ code: rfq.rfqCode, title: rfq.title, description: rfq.description }} />
           </div>
         </Card>
       </div>

@@ -524,6 +524,19 @@ export default function Configurator() {
 
   // Live server-side diagnostic: PERA event-level lock (eligible vendor count).
   const debouncedSpecs = useDebouncedValue(specs, 600);
+
+  // Live print check: image resolution at the real printed size, and artwork outside the print areas.
+  const [printCheck, setPrintCheck] = useState({ issues: [], quality: {} });
+  useEffect(() => {
+    let cancelled = false;
+    import('../../utils/productionPack')
+      .then(({ checkPrintQuality }) => checkPrintQuality(debouncedSpecs))
+      .then((result) => !cancelled && setPrintCheck(result))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedSpecs]);
   useEffect(() => {
     let cancelled = false;
     const qty = sizes.reduce((sum, s) => sum + (Number(debouncedSpecs.sizeBreakdown[s]) || 0), 0);
@@ -722,7 +735,7 @@ export default function Configurator() {
               <div className="space-y-5">
                 <LayerList specs={specs} side={side} selectedId={selectedId} onSelect={selectLayer} art={art} />
                 <div className="h-px bg-white/[0.07]" />
-                <LayerInspector specs={specs} selectedId={selectedId} art={art} onSideChange={setSide} units={units} />
+                <LayerInspector specs={specs} selectedId={selectedId} art={art} onSideChange={setSide} units={units} printCheck={printCheck} />
               </div>
             )}
             {tab === 'order' && (
@@ -755,6 +768,30 @@ export default function Configurator() {
                       <input type="number" min={minDays || 1} value={deliveryOverride} placeholder={minDays ? String(minDays) : ''} onChange={(e) => setDeliveryOverride(e.target.value)} className={cx(studioInput, 'pl-9')} />
                     </span>
                   </label>
+                </Group>
+                <Group title="Print check" hint="Checked against the real print size. Fix these before launch for the best result; they don't block the launch.">
+                  {printCheck.issues.length === 0 ? (
+                    <p className="flex items-center gap-2 rounded-xl bg-emerald-400/10 px-3 py-2 text-xs text-emerald-200 ring-1 ring-emerald-400/20">
+                      <CircleCheck className="h-3.5 w-3.5 shrink-0" /> Artwork is sharp and inside the print areas.
+                    </p>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {printCheck.issues.map((issue) => (
+                        <li key={`${issue.layerId}-${issue.message}`}>
+                          <button
+                            type="button"
+                            onClick={() => selectLayer(issue.layerId)}
+                            className={cx(
+                              'flex w-full items-start gap-2 rounded-xl px-3 py-2 text-left text-xs ring-1 transition hover:brightness-125',
+                              issue.level === 'bad' ? 'bg-red-500/10 text-red-200 ring-red-400/25' : 'bg-amber-400/10 text-amber-100 ring-amber-400/20'
+                            )}
+                          >
+                            <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {issue.message}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </Group>
                 <Group title="Technical summary">
                   <dl className="grid grid-cols-2 gap-x-3 gap-y-2 rounded-xl bg-zinc-950/60 p-3 text-xs ring-1 ring-white/[0.06]">

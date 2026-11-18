@@ -7,7 +7,7 @@
  * Applying a preset moves the layer to the side and position, and sizes it to the width.
  */
 import { HPS_Y, PRINT_AREAS, UNITS_PER_CM, VIEW_W } from './garmentGeometry.js';
-import { FONT_WIDTH, LIMITS } from './design.js';
+import { LIMITS, textExtent } from './design.js';
 
 const CHEST = [
   { id: 'left-chest', label: 'Left chest', hint: 'Logo over the heart', side: 'front', x: 9.5, y: 20, width: 9 },
@@ -68,8 +68,9 @@ export function applyPlacement(layer, preset, garment) {
   if (layer.kind === 'image' || layer.url) {
     patch.scale = Math.round(Math.max(LIMITS.scaleMin, Math.min(LIMITS.scaleMax, widthUnits / area.w)) * 100) / 100;
   } else {
-    const perPx = (FONT_WIDTH[layer.font] || 0.6) * Math.max(1, layer.text.length);
-    patch.size = Math.round(Math.max(LIMITS.sizeMin, Math.min(LIMITS.sizeMax, widthUnits / perPx)));
+    // Text width scales with the font size, so measure it once and scale to the preset width.
+    const { w } = textExtent({ ...layer, size: 100 });
+    patch.size = Math.round(Math.max(LIMITS.sizeMin, Math.min(LIMITS.sizeMax, (widthUnits / w) * 100)));
   }
   return patch;
 }

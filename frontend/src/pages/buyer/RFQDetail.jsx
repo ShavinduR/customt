@@ -284,7 +284,7 @@ export default function RFQDetail() {
           <Card>
             <CardHeader icon={Lock} title="Locked specification" />
             <div className="p-4">
-              <SpecSummary specs={rfq.designSpecs} expectedDeliveryDays={rfq.expectedDeliveryDays} />
+              <SpecSummary specs={rfq.designSpecs} expectedDeliveryDays={rfq.expectedDeliveryDays} meta={{ code: rfq.rfqCode, title: rfq.title, description: rfq.description }} />
             </div>
           </Card>
           <Card className="p-4">
