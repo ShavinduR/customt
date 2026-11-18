@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { BarChart3, ChevronDown, Compass, FileCheck2, Store, MessagesSquare, Gavel, History, Scale, ShieldCheck, Users, LayoutDashboard, LogOut, Menu, Package, PencilRuler, Radio, Shirt, UserCircle, Wallet, Wifi, WifiOff, X } from 'lucide-react';
+import { BarChart3, ChevronDown, Compass, Download, FileCheck2, Store, MessagesSquare, Gavel, History, Scale, ShieldCheck, Users, LayoutDashboard, LogOut, Menu, Package, PencilRuler, Radio, Shirt, UserCircle, Wallet, Wifi, WifiOff, X } from 'lucide-react';
 import { useAuth, roleHome } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import NotificationBell from './NotificationBell';
+import { usePwa } from '../../context/PwaContext';
 import { cx } from '../ui';
 import { initials } from '../../utils/format';
 
@@ -54,6 +55,7 @@ export function Logo({ to = '/' }) {
 
 function UserMenu() {
   const { user, logout } = useAuth();
+  const pwa = usePwa();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -91,6 +93,18 @@ function UserMenu() {
           >
             <UserCircle className="h-4 w-4" /> Account & wallet
           </button>
+          {pwa.canInstall && (
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              onClick={() => {
+                setOpen(false);
+                pwa.install();
+              }}
+            >
+              <Download className="h-4 w-4" /> Install CustomT app
+            </button>
+          )}
           <button
             type="button"
             className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"

@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, BadgeCheck, Gavel, KeyRound, Lock, PencilRuler, Scale, ShieldCheck, Timer } from 'lucide-react';
 import { Logo } from '../components/layout/AppLayout';
 import TShirtPreview from '../components/configurator/TShirtPreview';
+import { InstallAppButton } from '../context/PwaContext';
 
 const HERO_SPECS = {
   garmentType: 'Crew Neck',
@@ -70,6 +71,7 @@ export default function Landing() {
             <Link to="/register" className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-6 py-3 font-semibold text-slate-700 hover:bg-slate-50">
               Join as a printer
             </Link>
+            <InstallAppButton size="lg" variant="ghost" label="Install the app" />
           </div>
           <dl className="mt-10 grid max-w-md grid-cols-3 gap-4 text-center">
             {[
