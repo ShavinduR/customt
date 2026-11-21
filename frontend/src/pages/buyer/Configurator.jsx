@@ -773,12 +773,13 @@ export default function Configurator() {
                     face={side === 'back' ? 'back' : 'front'}
                     className="min-h-0 flex-1 px-4 pb-14 pt-16"
                     interactive
+                    zoomable
                     selectedId={selectedId}
                     onSelect={selectLayer}
                     onLayerMove={moveLayer}
                   />
                   <p className="pointer-events-none absolute bottom-3 left-3 hidden max-w-[11rem] text-[11px] leading-snug text-zinc-500 xl:block">
-                    Drag your prints on the photo. Sleeve prints show in 3D.
+                    Drag your prints on the photo. Scroll, pinch or double-click to zoom. Sleeve prints show in 3D.
                   </p>
                 </div>
               ) : (
@@ -786,7 +787,7 @@ export default function Configurator() {
               )}
             </Suspense>
             {hasPhotoMockup(specs.garmentType) && (
-              <div className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2">
+              <div className="absolute bottom-3 left-3 z-10 sm:left-1/2 sm:-translate-x-1/2">
                 <Segmented
                   size="sm"
                   label="Preview"
