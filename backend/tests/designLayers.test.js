@@ -109,3 +109,11 @@ test('button-up shirts are accepted, including long-sleeve prints, and add their
     (err) => JSON.stringify(err.details).includes('garmentType must be one of')
   );
 });
+
+test('the V-neck T-shirt is a supported garment with the T-shirt delivery time', () => {
+  const layers = { textLayers: [text()], imageLayers: [] };
+  const vneck = buildDesignSpecs({ ...base, garmentType: 'V-Neck', ...layers });
+  const crew = buildDesignSpecs({ ...base, garmentType: 'Crew Neck', ...layers });
+  assert.equal(vneck.garmentType, 'V-Neck');
+  assert.equal(calculateExpectedDeliveryDays(vneck), calculateExpectedDeliveryDays(crew));
+});

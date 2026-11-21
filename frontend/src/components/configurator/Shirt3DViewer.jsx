@@ -366,7 +366,7 @@ export default function Shirt3DViewer({ specs, className = '', height = '26rem',
             <Gauge className="h-3 w-3" />
             {q.moving ? 'Fast' : 'HD'} · {q.dpr.toFixed(2).replace(/\.?0+$/, '')}×
           </div>
-          <p className="pointer-events-none absolute bottom-3 right-3 hidden text-[11px] text-zinc-500 md:block">Drag to rotate · scroll or pinch to zoom · right-drag to pan</p>
+          <p className="pointer-events-none absolute bottom-3 right-3 hidden text-[11px] text-zinc-500 2xl:block">Drag to rotate · scroll or pinch to zoom · right-drag to pan</p>
         </>
       ) : (
         <>

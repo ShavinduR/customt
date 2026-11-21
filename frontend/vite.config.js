@@ -43,7 +43,7 @@ export default defineConfig(({ mode }) => ({
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
         // Heavy chunks that load only on demand (3D viewer, PDF receipts) are not part of the install
         // download; they are cached the first time they are used (see runtimeCaching below).
-        globIgnores: ['**/Shirt3DViewer-*.js', '**/jspdf*.js', '**/html2canvas*.js', '**/purify*.js', '**/index.es-*.js'],
+        globIgnores: ['**/mockups/**', '**/Shirt3DViewer-*.js', '**/jspdf*.js', '**/html2canvas*.js', '**/purify*.js', '**/index.es-*.js'],
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         navigateFallback: '/index.html',
         cleanupOutdatedCaches: true,
@@ -60,6 +60,12 @@ export default defineConfig(({ mode }) => ({
             urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith('/models/'),
             handler: 'CacheFirst',
             options: { cacheName: 'customt-garment-models', expiration: { maxEntries: 12, maxAgeSeconds: 60 * 60 * 24 * 30 } },
+          },
+          {
+            // Garment photos for the photo preview: downloaded when first shown, then kept on the device.
+            urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith('/mockups/'),
+            handler: 'CacheFirst',
+            options: { cacheName: 'customt-garment-photos', expiration: { maxEntries: 12, maxAgeSeconds: 60 * 60 * 24 * 30 } },
           },
         ],
       },

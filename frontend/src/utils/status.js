@@ -39,6 +39,7 @@ export const PRINT_TYPE_INFO = {
 
 export const GARMENT_INFO = {
   'Crew Neck': 'Classic round-neck T-shirt for events and campaigns',
+  'V-Neck': 'V-neck T-shirt, a smarter look for staff and sports teams',
   Polo: 'Collared polo T-shirt for corporate and staff uniforms',
   Hoodie: 'Warm pullover with hood and front pocket',
   'Short Sleeve Shirt': 'Button-up collared shirt for office and school uniforms',

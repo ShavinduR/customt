@@ -4,6 +4,7 @@ import {
   Box,
   CalendarClock,
   CircleAlert,
+  Camera,
   CircleCheck,
   Columns2,
   Compass,
@@ -40,9 +41,11 @@ import { Group, IconButton, Kbd, Panel, PanelHeader, Segmented, StudioButton, Ti
 import { LayerInspector, LayerList, PatternEditor, allLayersOf, useArtwork } from '../../components/studio/ArtworkPanels';
 import { COLOR_SWATCHES, FABRIC_INFO, GARMENT_INFO, PRINT_TYPE_INFO } from '../../utils/status';
 import { SIDE_LABEL } from '../../utils/garmentGeometry';
+import { hasPhotoMockup } from '../../utils/photoMockup';
 import { estimateDeliveryDays, layersOf, printedSides } from '../../utils/design';
 
 const Shirt3DViewer = lazy(() => import('../../components/configurator/Shirt3DViewer'));
+const PhotoMockupView = lazy(() => import('../../components/configurator/PhotoMockupView'));
 
 const DRAFT_KEY = 'customt_rfq_draft_v2';
 const LEGACY_DRAFT_KEY = 'customt_rfq_draft_v1';
@@ -107,6 +110,19 @@ function clearDraft() {
   } catch {
     /* ignore */
   }
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const isoDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+/** Calendar date of delivery: today + the 24-hour auction + `days`. */
+const dateAfterDays = (days) => isoDate(new Date(Date.now() + (Number(days) + 1) * DAY_MS));
+/** Delivery days for a "needed by" date (inverse of dateAfterDays); null for an empty/invalid date. */
+function daysUntil(value) {
+  const [y, m, d] = String(value).split('-').map(Number);
+  if (!y || !m || !d) return null;
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return Math.round((new Date(y, m - 1, d) - start) / DAY_MS) - 1;
 }
 
 /* ─────────────────────────── Right panel: Garment tab ─────────────────────────── */
@@ -447,6 +463,22 @@ export default function Configurator() {
   const [touched, setTouched] = useState(false);
   const tour = useFirstVisitTour(TOUR_KEY, { ready: Boolean(catalog) });
   const [viewMode, setViewModeState] = useState(loadViewMode);
+  // Preview pane: the realistic photo preview (default, for garments that have photos) or the live 3D model.
+  const [previewKind, setPreviewKind] = useState(() => {
+    try {
+      return localStorage.getItem('customt_preview_kind') === '3d' ? '3d' : 'photo';
+    } catch {
+      return 'photo';
+    }
+  });
+  const choosePreview = (kind) => {
+    setPreviewKind(kind);
+    try {
+      localStorage.setItem('customt_preview_kind', kind);
+    } catch {
+      /* ignore */
+    }
+  };
   const [units, setUnitsState] = useState(() => {
     try {
       return localStorage.getItem('customt_units') === 'in' ? 'in' : 'cm';
@@ -718,8 +750,55 @@ export default function Configurator() {
                 </div>
               }
             >
-              <Shirt3DViewer specs={specs} variant="studio" height="100%" view={side} onViewChange={onViewChange} className="relative" />
+              {previewKind === 'photo' && hasPhotoMockup(specs.garmentType) ? (
+                <div className="relative flex h-full flex-col">
+                  <div className="absolute left-1/2 top-4 z-10 flex -translate-x-1/2 items-center gap-1 rounded-xl border border-white/15 bg-white/[0.07] p-1 shadow-2xl shadow-black/40 backdrop-blur-xl" role="toolbar" aria-label="Photo side">
+                    {['front', 'back'].map((f) => (
+                      <button
+                        key={f}
+                        type="button"
+                        onClick={() => setSide(f)}
+                        aria-pressed={(side === 'back' ? 'back' : 'front') === f}
+                        className={cx(
+                          'rounded-lg px-3 py-1.5 text-xs font-semibold transition',
+                          (side === 'back' ? 'back' : 'front') === f ? 'bg-brand-500 text-white' : 'text-zinc-200 hover:bg-white/10'
+                        )}
+                      >
+                        {f === 'front' ? 'Front' : 'Back'}
+                      </button>
+                    ))}
+                  </div>
+                  <PhotoMockupView
+                    specs={specs}
+                    face={side === 'back' ? 'back' : 'front'}
+                    className="min-h-0 flex-1 px-4 pb-14 pt-16"
+                    interactive
+                    selectedId={selectedId}
+                    onSelect={selectLayer}
+                    onLayerMove={moveLayer}
+                  />
+                  <p className="pointer-events-none absolute bottom-3 left-3 hidden max-w-[11rem] text-[11px] leading-snug text-zinc-500 xl:block">
+                    Drag your prints on the photo. Sleeve prints show in 3D.
+                  </p>
+                </div>
+              ) : (
+                <Shirt3DViewer specs={specs} variant="studio" height="100%" view={side} onViewChange={onViewChange} className="relative" />
+              )}
             </Suspense>
+            {hasPhotoMockup(specs.garmentType) && (
+              <div className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2">
+                <Segmented
+                  size="sm"
+                  label="Preview"
+                  value={previewKind}
+                  onChange={choosePreview}
+                  options={[
+                    { value: '3d', label: '3D', icon: Box },
+                    { value: 'photo', label: 'Photo', icon: Camera },
+                  ]}
+                />
+              </div>
+            )}
           </Panel>
         )}
 
@@ -758,16 +837,34 @@ export default function Configurator() {
                     <span className="mb-1 block text-xs text-zinc-400">Notes for vendors</span>
                     <textarea rows={3} maxLength={1000} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Packaging, Pantone references, delivery location…" className={studioInput} />
                   </label>
-                  <label className="block">
-                    <span className="mb-1 flex items-center justify-between text-xs text-zinc-400">
-                      Expected delivery (days)
-                      {minDays ? <span className="text-zinc-500">minimum {minDays}</span> : null}
-                    </span>
-                    <span className="relative block">
-                      <CalendarClock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-                      <input type="number" min={minDays || 1} value={deliveryOverride} placeholder={minDays ? String(minDays) : ''} onChange={(e) => setDeliveryOverride(e.target.value)} className={cx(studioInput, 'pl-9')} />
-                    </span>
-                  </label>
+                  {/* Buyers think in dates ("needed by 15 December"); the RFQ stores delivery days. Days count from
+                      the end of the 24-hour auction, so the date is today + 1 + days. */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block">
+                      <span className="mb-1 block text-xs text-zinc-400">Needed by</span>
+                      <input
+                        type="date"
+                        min={minDays ? dateAfterDays(minDays) : undefined}
+                        value={deliveryDays ? dateAfterDays(deliveryDays) : ''}
+                        onChange={(e) => {
+                          const days = daysUntil(e.target.value);
+                          if (days !== null) setDeliveryOverride(String(Math.max(1, days)));
+                        }}
+                        className={cx(studioInput, '[color-scheme:dark]')}
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 flex items-center justify-between text-xs text-zinc-400">
+                        Delivery (days)
+                        {minDays ? <span className="text-zinc-500">min {minDays}</span> : null}
+                      </span>
+                      <span className="relative block">
+                        <CalendarClock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                        <input type="number" min={minDays || 1} value={deliveryOverride} placeholder={minDays ? String(minDays) : ''} onChange={(e) => setDeliveryOverride(e.target.value)} className={cx(studioInput, 'pl-9')} />
+                      </span>
+                    </label>
+                  </div>
+                  <p className="-mt-1 text-[11px] text-zinc-500">Printers deliver within these days after the 24-hour auction closes.</p>
                 </Group>
                 <Group title="Print check" hint="Checked against the real print size. Fix these before launch for the best result; they don't block the launch.">
                   {printCheck.issues.length === 0 ? (

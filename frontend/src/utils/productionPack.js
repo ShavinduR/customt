@@ -233,6 +233,16 @@ export async function renderPrintFile(specs, side, dpi = PRINT_DPI) {
 
 /** Front and back flat views (JPEG data URLs), cut from the same texture the 3D model uses. */
 async function renderFlatViews(specs) {
+  // Garments with a photo preview get realistic front/back pictures; the others the flat 2D views.
+  const { hasPhotoMockup, photoMockupDataUrl, PHOTO_SIZE } = await import('./photoMockup.js');
+  if (hasPhotoMockup(specs.garmentType)) {
+    try {
+      const [front, back] = await Promise.all([photoMockupDataUrl(specs, 'front'), photoMockupDataUrl(specs, 'back')]);
+      return { front, back, aspect: PHOTO_SIZE.height / PHOTO_SIZE.width };
+    } catch {
+      /* fall back to the flat views */
+    }
+  }
   const atlas = document.createElement('canvas');
   await paintDesignTexture(atlas, specs);
   const views = {};
