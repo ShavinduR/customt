@@ -354,7 +354,10 @@ const TShirtPreview = forwardRef(function TShirtPreview(
                 <g clipPath={`url(#rg-${half.region}-${uid})`}>
                   {renderFace(half.face, { ownedSides: half.owns ? [piece.side] : [], flat: true })}
                   {/* Cut line along the armhole seam (half of the stroke falls inside this piece). */}
-                  <path d={layout.regions.cutLines[half.region]} fill="none" stroke={isActive ? '#818cf8' : shade(color, -38)} strokeWidth={isActive ? 4 : 3.2} />
+                  {/* Clipped to the garment: below the armpit the seam runs outside a sleeve piece. */}
+                  <g clipPath={`url(#body-${uid})`}>
+                    <path d={layout.regions.cutLines[half.region]} fill="none" stroke={isActive ? '#818cf8' : shade(color, -38)} strokeWidth={isActive ? 4 : 3.2} />
+                  </g>
                   {isActive && <path d={BODY[garment]} fill="none" stroke="#818cf8" strokeWidth="4" strokeLinejoin="round" />}
                 </g>
               </g>

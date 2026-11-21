@@ -5,8 +5,10 @@ import { Badge, Button, Modal, Spinner } from '../ui';
 import { SIDE_LABEL } from '../../utils/garmentGeometry';
 import { fontFamily, fontWeight, layersOf, printedSides } from '../../utils/design';
 import { useToast } from '../../context/ToastContext';
+import { hasPhotoMockup } from '../../utils/photoMockup';
 
 const Shirt3DViewer = lazy(() => import('../configurator/Shirt3DViewer'));
+const PhotoMockupView = lazy(() => import('../configurator/PhotoMockupView'));
 
 /** Read-only locked specification card (RFQ detail & order pages). */
 export default function SpecSummary({ specs, expectedDeliveryDays, isLocked = true, compact = false, meta }) {
@@ -27,6 +29,7 @@ export default function SpecSummary({ specs, expectedDeliveryDays, isLocked = tr
   };
   if (!specs) return null;
   const sides = printedSides(specs);
+  const photo = hasPhotoMockup(specs.garmentType);
   const { textLayers, imageLayers } = layersOf(specs);
   const rows = [
     ['Garment', specs.garmentType],
@@ -40,11 +43,19 @@ export default function SpecSummary({ specs, expectedDeliveryDays, isLocked = tr
   return (
     <div>
       <div className={compact ? 'grid grid-cols-[6rem_1fr] gap-4' : 'grid grid-cols-2 gap-2'}>
-        {(compact ? ['front'] : ['front', 'back']).map((view) => (
-          <div key={view} className="rounded-xl bg-slate-50 p-2">
-            <TShirtPreview specs={specs} view={view} />
-          </div>
-        ))}
+        {(compact ? ['front'] : ['front', 'back']).map((view) =>
+          !compact && photo ? (
+            <div key={view} className="aspect-[8/9] rounded-xl bg-gradient-to-b from-slate-50 to-slate-100 p-1">
+              <Suspense fallback={<Spinner className="h-full" />}>
+                <PhotoMockupView specs={specs} face={view} className="h-full w-full" />
+              </Suspense>
+            </div>
+          ) : (
+            <div key={view} className="rounded-xl bg-slate-50 p-2">
+              <TShirtPreview specs={specs} view={view} />
+            </div>
+          )
+        )}
         {compact && (
           <dl className="space-y-1 text-sm">
             {rows.slice(0, 4).map(([k, v]) => (
