@@ -8,14 +8,14 @@ import Rulers from './Rulers';
 import { PlacementGrid, PlacementMenu } from './Placements';
 import { BODY, PRINT_AREAS, SIDES, SIDE_LABEL } from '../../utils/garmentGeometry';
 import { UNITS, formatLength, formatSize } from '../../utils/units';
-import { FONTS, LIMITS, defaultTextSize, fontFamily, fontWeight, newLayerId, normRotation, textExtent } from '../../utils/design';
+import { FONTS, LIMITS, defaultTextSize, isSmallSide, fontFamily, fontWeight, newLayerId, normRotation, textExtent } from '../../utils/design';
 import { Group, IconButton, Kbd, Panel, Segmented, Slider, StudioButton, studioInput } from './StudioUI';
 
 const ACCEPT = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
 const MAX_MB = 2;
 const TEXT_SWATCHES = ['#FFFFFF', '#111827', '#DC2626', '#F59E0B', '#2563EB', '#15803D', '#D4AF37'];
-const SHORT_LABEL = { front: 'Front', back: 'Back', leftSleeve: 'L sleeve', rightSleeve: 'R sleeve' };
-const isSleeve = (side) => side === 'leftSleeve' || side === 'rightSleeve';
+const SHORT_LABEL = { front: 'Front', back: 'Back', leftSleeve: 'L sleeve', rightSleeve: 'R sleeve', insideLabel: 'Label' };
+const isSleeve = isSmallSide;
 
 /** Picks a readable default ink colour for the garment colour. */
 function contrastInk(hex = '#FFFFFF') {
@@ -64,7 +64,7 @@ export function useArtwork({ specs, update, side, onSelect }) {
     const layer = {
       id: newLayerId('t'),
       side,
-      text: isSleeve(side) ? 'NO 7' : 'YOUR TEXT',
+      text: side === 'insideLabel' ? 'YOUR BRAND' : isSleeve(side) ? 'NO 7' : 'YOUR TEXT',
       font: FONTS[0].name,
       size: defaultTextSize(side),
       color: contrastInk(specs.color),

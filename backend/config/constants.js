@@ -30,7 +30,8 @@ const MIN_ORDER_QUANTITY = 20;
 
 /** Layered artwork rules for the visual configurator (Module 1). */
 const DESIGN = Object.freeze({
-  SIDES: Object.freeze(['front', 'back', 'leftSleeve', 'rightSleeve']),
+  // insideLabel = printed inside the back neck (tagless brand label).
+  SIDES: Object.freeze(['front', 'back', 'leftSleeve', 'rightSleeve', 'insideLabel']),
   FONTS: Object.freeze(['Bebas Neue', 'Montserrat', 'Playfair Display', 'Pacifico']),
   MAX_TEXT_LAYERS: 8,
   MAX_IMAGE_LAYERS: 8,

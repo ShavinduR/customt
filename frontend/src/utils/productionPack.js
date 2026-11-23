@@ -12,7 +12,7 @@
  * Everything is generated in the browser from the locked specification (fonts and images are already loaded
  * there), so no artwork has to be re-uploaded and nothing heavy runs on the server.
  */
-import { HPS_Y, PRINT_AREAS, SIDE_LABEL, UNITS_PER_CM, VIEW_H, VIEW_W } from './garmentGeometry.js';
+import { HPS_Y, NECK_SEAM_Y, PRINT_AREAS, SIDE_LABEL, TRIMS, UNITS_PER_CM, VIEW_H, VIEW_W } from './garmentGeometry.js';
 import { layersOf, printedSides, textExtent } from './design.js';
 import { TEXTURE_HEIGHT, TEXTURE_SCALE, TEXTURE_WIDTH, drawLayer, loadDesignFonts, loadImage, paintDesignTexture } from './designTexture.js';
 
@@ -147,6 +147,10 @@ async function describeLayers(specs) {
 function areaInfo(specs, side) {
   const g = garmentOf(specs);
   const area = PRINT_AREAS[g][side];
+  if (side === 'insideLabel') {
+    const below = fmt(cm(area.cy - area.h / 2 - NECK_SEAM_Y[g]));
+    return { w: cm(area.w), h: cm(area.h), top: null, where: `printed INSIDE the back, top edge ${below} cm below the neck seam` };
+  }
   return {
     w: cm(area.w),
     h: cm(area.h),
@@ -335,6 +339,13 @@ export async function buildSpecSheet(specs, meta = {}) {
   doc.roundedRect(M, y + 2, 10, 6, 1, 1, 'FD');
   font(10, 'bold');
   text((specs.color || '').toUpperCase(), M + 13, y + 6.6);
+  const trims = TRIMS[garmentOf(specs)] || [];
+  if (trims.length) {
+    font(7.5, 'normal', MUTED);
+    text('TRIMS (CUT SIZE, MATCHING COLOUR)', M + colW, y);
+    font(9, 'normal');
+    text(trims.map((t) => `${t.label} ${fmt(t.lengthCm)} × ${fmt(t.widthCm)} cm, cut ${t.cut}`).join('  ·  '), M + colW, y + 6.6);
+  }
   y += 14;
 
   // Front / back views
@@ -386,7 +397,7 @@ export async function buildSpecSheet(specs, meta = {}) {
     font(9.5, 'bold');
     text(SIDE_LABEL[side], M + 2, y + 0.8);
     font(8, 'normal', MUTED);
-    text(`Print area ${fmt(a.w)} × ${fmt(a.h)} cm${a.top !== null ? `, top edge ${fmt(a.top)} cm below HPS` : ''}  ·  print file ${side}_${fmt(a.w)}x${fmt(a.h)}cm_${PRINT_DPI}dpi.png`, W - M - 2, y + 0.8, { align: 'right' });
+    text(`Print area ${fmt(a.w)} × ${fmt(a.h)} cm${a.where ? `, ${a.where}` : a.top !== null ? `, top edge ${fmt(a.top)} cm below HPS` : ''}  ·  print file ${side}_${fmt(a.w)}x${fmt(a.h)}cm_${PRINT_DPI}dpi.png`, W - M - 2, y + 0.8, { align: 'right' });
     y += 7;
     for (const row of rows.filter((r) => r.side === side)) {
       ensure(13);

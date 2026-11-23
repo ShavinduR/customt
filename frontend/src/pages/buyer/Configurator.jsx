@@ -783,7 +783,7 @@ export default function Configurator() {
                   </p>
                 </div>
               ) : (
-                <Shirt3DViewer specs={specs} variant="studio" height="100%" view={side} onViewChange={onViewChange} className="relative" />
+                <Shirt3DViewer specs={specs} variant="studio" height="100%" view={side === 'insideLabel' ? 'back' : side} onViewChange={onViewChange} className="relative" />
               )}
             </Suspense>
             {hasPhotoMockup(specs.garmentType) && (

@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { BODY, PRINT_AREAS, SIDES, SIDE_FACE, VIEW_H, VIEW_W, detailsFor, shade } from '../../utils/garmentGeometry';
+import { BODY, HPS_Y, NECK_SEAM_Y, PRINT_AREAS, SIDES, SIDE_FACE, VIEW_H, VIEW_W, detailsFor, shade } from '../../utils/garmentGeometry';
 import { FONT_WIDTH, fontFamily, fontWeight, layersOf } from '../../utils/design';
 import { patternLayout, toSvgMatrix } from '../../utils/patternLayout';
 import { formatSize } from '../../utils/units';
@@ -11,12 +11,17 @@ import { formatSize } from '../../utils/units';
  * mode "garment" (default): one view of the garment.
  *   view: 'front' | 'back' | 'leftSleeve' | 'rightSleeve'. Sleeve views zoom in on that sleeve and rotate it
  *   level. Sleeve prints sit on the front face of the garment, so they also show in the front view.
- * mode "pattern": the garment cut into flat pieces (front, back, two unfolded sleeves), see patternLayout.js.
+ *   'insideLabel' zooms in on the inside of the back neck, where the label is printed (never on the outside).
+ * mode "pattern": the garment cut into flat pieces (front, back, two unfolded sleeves, the inside label window
+ *   and the trims), see patternLayout.js.
  *   Every piece is drawn from the same face artwork, so what you place on a piece is exactly what the 3D
  *   model shows. Supports zoom (wheel, or the imperative zoomIn/zoomOut/fit) and panning.
  */
 
 const SLEEVE_VIEW = { w: 140, h: 161 };
+const LABEL_VIEW = { w: 170, h: 128 };
+/** Back neck seam seen from the inside: a curve from shoulder to shoulder through the centre-back seam point. */
+const neckSeam = (g) => `M${VIEW_W / 2 - 51} ${HPS_Y[g]} Q${VIEW_W / 2} ${2 * NECK_SEAM_Y[g] - HPS_Y[g]} ${VIEW_W / 2 + 51} ${HPS_Y[g]}`;
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 5;
 const clampPct = (v) => Math.max(0, Math.min(100, Math.round(v * 10) / 10));
@@ -62,6 +67,7 @@ const TShirtPreview = forwardRef(function TShirtPreview(
   const face = SIDE_FACE[view] || 'front';
   const areas = PRINT_AREAS[garment];
   const sleeveView = !pattern && (view === 'leftSleeve' || view === 'rightSleeve');
+  const insideView = !pattern && view === 'insideLabel';
   const { textLayers, imageLayers } = useMemo(() => layersOf(specs), [specs]);
   const allLayers = useMemo(() => [...imageLayers.map((l) => ({ ...l, kind: 'image' })), ...textLayers.map((l) => ({ ...l, kind: 'text' }))], [textLayers, imageLayers]);
   const fabricPattern = specs.fabric === 'Pique/Crocodile' ? 'pique' : specs.fabric === 'Dry-Fit/Wetlook' ? 'mesh' : 'cotton';
@@ -73,7 +79,9 @@ const TShirtPreview = forwardRef(function TShirtPreview(
     ? `0 0 ${layout.width} ${layout.height}`
     : sleeveView
       ? `${active.cx - SLEEVE_VIEW.w / 2} ${active.cy - SLEEVE_VIEW.h / 2} ${SLEEVE_VIEW.w} ${SLEEVE_VIEW.h}`
-      : `0 0 ${VIEW_W} ${VIEW_H}`;
+      : insideView
+        ? `${active.cx - LABEL_VIEW.w / 2} ${HPS_Y[garment] - 22} ${LABEL_VIEW.w} ${LABEL_VIEW.h}`
+        : `0 0 ${VIEW_W} ${VIEW_H}`;
   const viewTransform = sleeveView ? `rotate(${-active.rotate} ${active.cx} ${active.cy})` : undefined;
   // In pattern mode any layer can be dragged (all pieces are on screen); in garment mode only the shown side.
   const canEdit = (layer) => editable && (pattern || layer.side === view);
@@ -224,7 +232,8 @@ const TShirtPreview = forwardRef(function TShirtPreview(
     Sublimation: { opacity: 0.88 },
   }[printType] || {};
 
-  const thin = sleeveView ? 0.6 : 1.2;
+  const zoomed = sleeveView || insideView;
+  const thin = zoomed ? 0.6 : 1.2;
 
   const renderLayer = (layer, area) => {
     const cx = (layer.x / 100) * area.w;
@@ -283,11 +292,16 @@ const TShirtPreview = forwardRef(function TShirtPreview(
    */
   const renderFace = (f, { ownedSides, flat = false }) => {
     const sidesOnFace = SIDES.filter((s) => SIDE_FACE[s] === f);
+    const inside = f === 'inside';
     return (
       <>
         <path d={BODY[garment]} fill={color} />
         <path d={BODY[garment]} fill={`url(#${fabricPattern}-${uid})`} />
-        {detailsFor(garment, f).map((d, i) => (
+        {/* Inside of the back: a little darker, with the back neck seam (rib or collar) along the top. */}
+        {inside && <path d={BODY[garment]} fill="#000" fillOpacity="0.1" />}
+        {inside && <path d={neckSeam(garment)} fill="none" stroke={shade(color, -30)} strokeWidth="7" strokeLinecap="round" />}
+        {inside && <path d={neckSeam(garment)} fill="none" stroke={shade(color, -45)} strokeWidth="0.6" strokeDasharray="2 1.5" transform="translate(0 4.2)" />}
+        {(inside ? [] : detailsFor(garment, f)).map((d, i) => (
           <path
             // eslint-disable-next-line react/no-array-index-key
             key={i}
@@ -302,7 +316,7 @@ const TShirtPreview = forwardRef(function TShirtPreview(
         ))}
         {!flat && <path d={BODY[garment]} fill={`url(#light-${uid})`} />}
         {!flat && <path d={BODY[garment]} fill={`url(#fold-${uid})`} />}
-        <path d={BODY[garment]} fill="none" stroke={shade(color, -38)} strokeWidth={sleeveView ? 0.8 : 1.6} strokeLinejoin="round" />
+        <path d={BODY[garment]} fill="none" stroke={shade(color, -38)} strokeWidth={zoomed ? 0.8 : 1.6} strokeLinejoin="round" />
 
         <g clipPath={`url(#body-${uid})`}>
           {sidesOnFace.map((side) => {
@@ -326,10 +340,82 @@ const TShirtPreview = forwardRef(function TShirtPreview(
               </g>
             );
           })}
+          {/* On the back pattern piece: where the inside label is printed (on the other side of the fabric). */}
+          {flat && f === 'back' && (
+            <g transform={areaTransform(areas.insideLabel)} pointerEvents="none">
+              <rect x="0" y="0" width={areas.insideLabel.w} height={areas.insideLabel.h} rx="2" fill="none" stroke={shade(color, -45)} strokeWidth="0.9" strokeDasharray="3 2.5" />
+              <text x={areas.insideLabel.w / 2} y={areas.insideLabel.h / 2} textAnchor="middle" dominantBaseline="central" fontSize="6.5" fill={shade(color, -50)} fontFamily="Inter, sans-serif">
+                label inside
+              </text>
+            </g>
+          )}
         </g>
       </>
     );
   };
+
+  /** Third pattern row: the inside label window (editable) and the trim pieces (cut size, not printed). */
+  const renderExtras = () =>
+    layout.extras.map((e) => {
+      const { rect } = e;
+      const caption = (title, detail, active) => (
+        <>
+          <text x={rect.x + rect.w / 2} y={rect.y + rect.h + 22} textAnchor="middle" fontSize="13" fontWeight="600" fill={active ? '#c7d2fe' : '#d4d4d8'} fontFamily="Inter, sans-serif" pointerEvents="none">
+            {title}
+          </text>
+          <text x={rect.x + rect.w / 2} y={rect.y + rect.h + 36} textAnchor="middle" fontSize="10" fill="#71717a" fontFamily="Inter, sans-serif" pointerEvents="none">
+            {detail}
+          </text>
+        </>
+      );
+      if (e.kind === 'label') {
+        const isActive = editable && activeSide === 'insideLabel';
+        return (
+          <g
+            key="insideLabel"
+            data-piece="insideLabel"
+            onPointerDown={
+              editable
+                ? () => {
+                    pieceHit.current = true;
+                    if (tool !== 'hand') onPieceSelect?.('insideLabel');
+                  }
+                : undefined
+            }
+            style={{ cursor: tool === 'hand' ? undefined : 'pointer' }}
+          >
+            <clipPath id={`labelwin-${uid}`}>
+              <rect x={e.crop.x} y={e.crop.y} width={e.crop.w} height={e.crop.h} rx="6" />
+            </clipPath>
+            <g transform={toSvgMatrix(e.m)}>
+              <g clipPath={`url(#labelwin-${uid})`}>{renderFace('inside', { ownedSides: ['insideLabel'], flat: true })}</g>
+            </g>
+            <rect x={rect.x} y={rect.y} width={rect.w} height={rect.h} rx="6" fill="none" stroke={isActive ? '#818cf8' : '#52525b'} strokeWidth={isActive ? 2.5 : 1.2} strokeDasharray={isActive ? undefined : '6 4'} pointerEvents="none" />
+            {caption('Inside label', `${formatSize(areas.insideLabel.w, areas.insideLabel.h, units)} print area`, isActive)}
+          </g>
+        );
+      }
+      return (
+        <g
+          key={e.id}
+          data-trim={e.id}
+          onPointerDown={
+            editable
+              ? () => {
+                  pieceHit.current = true;
+                }
+              : undefined
+          }
+        >
+          <title>{e.note}</title>
+          <rect x={rect.x} y={rect.y} width={rect.w} height={rect.h} rx="3" fill={color} />
+          <rect x={rect.x} y={rect.y} width={rect.w} height={rect.h} rx="3" fill={`url(#rib-${uid})`} />
+          <rect x={rect.x} y={rect.y} width={rect.w} height={rect.h} rx="3" fill="none" stroke={shade(color, -38)} strokeWidth="1.6" />
+          {e.fold && <line x1={rect.x + 4} x2={rect.x + rect.w - 4} y1={rect.y + rect.h / 2} y2={rect.y + rect.h / 2} stroke="#ffffff" strokeOpacity="0.35" strokeWidth="1" strokeDasharray="5 5" pointerEvents="none" />}
+          {caption(e.label, `${formatSize(rect.w, rect.h, units)} · cut ${e.cut}${e.fold ? ' · fold' : ''}`, false)}
+        </g>
+      );
+    });
 
   const renderPattern = () => (
     <g ref={zoomGroup} transform={`translate(${zoom.x} ${zoom.y}) scale(${zoom.s})`}>
@@ -373,6 +459,7 @@ const TShirtPreview = forwardRef(function TShirtPreview(
           </g>
         );
       })}
+      {renderExtras()}
     </g>
   );
 
@@ -382,7 +469,7 @@ const TShirtPreview = forwardRef(function TShirtPreview(
       viewBox={viewBox}
       className={`${fit ? 'h-full w-full' : 'h-auto w-full'} select-none ${className}`}
       role="img"
-      aria-label={pattern ? `${specs.garmentType || 'T-shirt'} sewing pattern: front, back and both sleeves` : `${specs.garmentType || 'T-shirt'} preview, ${view} view`}
+      aria-label={pattern ? `${specs.garmentType || 'T-shirt'} sewing pattern: front, back, both sleeves, inside label and trims` : `${specs.garmentType || 'T-shirt'} preview, ${view} view`}
       tabIndex={editable ? 0 : undefined}
       onKeyDown={onKeyDown}
       onPointerDown={onPointerDown}
@@ -420,6 +507,9 @@ const TShirtPreview = forwardRef(function TShirtPreview(
           <circle cx="3" cy="3" r="1.15" fill="#000" fillOpacity="0.09" />
           <circle cx="0" cy="0" r="0.8" fill="#fff" fillOpacity="0.08" />
         </pattern>
+        <pattern id={`rib-${uid}`} width="3" height="6" patternUnits="userSpaceOnUse">
+          <line x1="1.5" y1="0" x2="1.5" y2="6" stroke="#000" strokeOpacity="0.14" strokeWidth="1.1" />
+        </pattern>
         <pattern id={`mesh-${uid}`} width="7" height="6" patternUnits="userSpaceOnUse">
           <circle cx="1.75" cy="1.5" r="1.05" fill="#000" fillOpacity="0.11" />
           <circle cx="5.25" cy="4.5" r="1.05" fill="#000" fillOpacity="0.11" />
@@ -441,10 +531,15 @@ const TShirtPreview = forwardRef(function TShirtPreview(
       ) : (
         <>
           <g transform={viewTransform}>
-            {!sleeveView && <ellipse cx={VIEW_W / 2} cy="446" rx="190" ry="8" fill="#0f172a" opacity="0.08" />}
+            {!zoomed && <ellipse cx={VIEW_W / 2} cy="446" rx="190" ry="8" fill="#0f172a" opacity="0.08" />}
             {renderFace(face, { ownedSides: SIDES.filter((s) => SIDE_FACE[s] === face) })}
           </g>
-          {!sleeveView && (
+          {insideView && (
+            <text x={VIEW_W / 2} y={HPS_Y[garment] + LABEL_VIEW.h - 28} textAnchor="middle" fontSize="5.5" fill="#94a3b8" fontFamily="Inter, sans-serif" letterSpacing="1.2">
+              INSIDE BACK NECK
+            </text>
+          )}
+          {!zoomed && (
             <text x={VIEW_W / 2} y="458" textAnchor="middle" fontSize="10" fill="#94a3b8" fontFamily="Inter, sans-serif" letterSpacing="2">
               {face.toUpperCase()}
             </text>
