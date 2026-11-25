@@ -5,7 +5,8 @@ import { rfqApi } from '../../api/client';
 import { useSocket, useSocketEvent } from '../../context/SocketContext';
 import { useToast } from '../../context/ToastContext';
 import { useCatalog } from '../../context/CatalogContext';
-import Leaderboard, { RankBadge, ScoreLegend } from '../../components/auction/Leaderboard';
+import { RankBadge } from '../../components/auction/Leaderboard';
+import HybridLeaderboard, { BEST_MATCH_HELP, SORTS } from '../../components/auction/HybridLeaderboard';
 import PriceDiagnosticAlert from '../../components/auction/PriceDiagnosticAlert';
 import SpecSummary from '../../components/auction/SpecSummary';
 import { Alert, Badge, Button, Card, CardHeader, Countdown, EmptyState, ErrorList, Field, PageHeader, PageLoader, StatusBadge, Textarea, TrustStars, Modal } from '../../components/ui';
@@ -40,6 +41,24 @@ export default function RFQDetail() {
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelBusy, setCancelBusy] = useState(false);
+  // Chosen sort tab, kept per RFQ (survives live updates, reloads of the snapshot and page refreshes).
+  const sortKey = `customt_bid_sort_${id}`;
+  const [sort, setSortState] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem(sortKey);
+      return SORTS.some((s) => s.value === saved) ? saved : 'best';
+    } catch {
+      return 'best';
+    }
+  });
+  const setSort = (value) => {
+    setSortState(value);
+    try {
+      sessionStorage.setItem(sortKey, value);
+    } catch {
+      /* storage unavailable */
+    }
+  };
   const flashTimer = useRef(null);
   const previousEntries = useRef(new Map());
 
@@ -214,7 +233,7 @@ export default function RFQDetail() {
       )}
       {rfq.status === 'CLOSED' && (
         <Alert tone="warning" className="mb-4" title="Bidding has ended — your decision is needed">
-          Review the ranked bids below and accept the offer that suits you best. Rank #1 has the highest combined score for price, trust and lead time.
+          Compare the bids below and select the seller that suits you best. The Best Match has the highest combined score for price (50%), vendor trust (30%) and delivery speed (20%).
         </Alert>
       )}
       {rfq.status === 'EXPIRED' && (
@@ -248,8 +267,8 @@ export default function RFQDetail() {
           <Card>
             <CardHeader
               icon={Gavel}
-              title="Live ranked bids"
-              subtitle="Vendors only see their own rank. Prices and identities are visible to you alone."
+              title="Compare bids"
+              subtitle="Every bidding printer, side by side. Vendors only see their own rank: prices and identities are visible to you alone."
               action={
                 <span className="hidden items-center gap-1.5 text-xs text-slate-500 sm:flex">
                   <span className={`h-2 w-2 rounded-full ${connected ? 'bg-emerald-500' : 'bg-slate-300'}`} />
@@ -269,12 +288,16 @@ export default function RFQDetail() {
                   }
                 />
               ) : (
-                <>
-                  <div className="mb-3">
-                    <ScoreLegend />
-                  </div>
-                  <Leaderboard entries={leaderboard} canAccept={canAccept} onAccept={setAccepting} flashIds={flashIds} quantity={rfq.designSpecs.totalQuantity} />
-                </>
+                <HybridLeaderboard
+                  rfqId={rfq._id}
+                  entries={leaderboard}
+                  sort={sort}
+                  onSortChange={setSort}
+                  canAccept={canAccept}
+                  onAccept={setAccepting}
+                  flashIds={flashIds}
+                  quantity={rfq.designSpecs.totalQuantity}
+                />
               )}
             </div>
           </Card>
@@ -297,7 +320,7 @@ export default function RFQDetail() {
               <br />+ (minLeadTime / leadTime) × 0.20
             </p>
             <p className="mt-2 text-xs text-slate-500">
-              Rankings update with every new or revised bid. A bid placed in the final 2 minutes extends the auction by 5 minutes (soft-close).
+              {BEST_MATCH_HELP} The other tabs only re-order the list; the rank # always comes from this score. Rankings update with every new or revised bid. A bid placed in the final 2 minutes extends the auction by 5 minutes (soft-close).
             </p>
           </Card>
         </div>
@@ -306,7 +329,8 @@ export default function RFQDetail() {
       <Modal
         open={Boolean(accepting)}
         onClose={() => !acceptBusy && setAccepting(null)}
-        title="Accept this bid?"
+        title="Select this seller and pay via escrow?"
+        subtitle="You can choose any bid, not only the Best Match."
         dismissible={!acceptBusy}
         footer={
           <>
@@ -314,7 +338,7 @@ export default function RFQDetail() {
               Back to bids
             </Button>
             <Button variant="success" icon={CheckCircle2} loading={acceptBusy} onClick={confirmAccept}>
-              Accept & create order
+              Select & continue to payment
             </Button>
           </>
         }
@@ -324,8 +348,8 @@ export default function RFQDetail() {
             <div className="flex items-center gap-3 rounded-xl border border-slate-200 p-3">
               <RankBadge rank={accepting.rank} />
               <div className="min-w-0">
-                <p className="font-semibold text-slate-900">{accepting.companyName || accepting.vendorName}</p>
-                <TrustStars score={accepting.trustScore} />
+                <p className="font-semibold text-slate-900">{accepting.businessName || accepting.companyName || accepting.vendorName}</p>
+                <TrustStars score={accepting.currentTrustScore ?? accepting.trustScore} />
               </div>
             </div>
             <dl className="space-y-2 text-sm">
@@ -338,8 +362,10 @@ export default function RFQDetail() {
                 <dd className="font-semibold">{accepting.leadTimeDays} days</dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-slate-500">Score</dt>
-                <dd className="font-mono">{accepting.score.toFixed(4)}</dd>
+                <dt className="text-slate-500">Match score</dt>
+                <dd className="font-mono">
+                  {Math.round(accepting.score * 100)}% ({accepting.score.toFixed(4)})
+                </dd>
               </div>
             </dl>
             <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700">

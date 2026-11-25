@@ -86,6 +86,18 @@ router.get(
   })
 );
 
+/**
+ * GET /api/rfqs/:id/vendors/:vendorId - credibility profile of one bidder (order history, KYB, reviews).
+ * RFQ owner or admin only, and only for vendors who bid on this RFQ. No contact details.
+ */
+router.get(
+  '/:id/vendors/:vendorId',
+  authorize(ROLES.BUYER, ROLES.ADMIN),
+  asyncHandler(async (req, res) => {
+    res.json({ success: true, profile: await auctionService.getBidderProfile(req.params.id, req.params.vendorId, req.user) });
+  })
+);
+
 /** PUT/PATCH /api/rfqs/:id - always rejected: specs are locked (CPAPO mitigation). */
 router.put('/:id', authorize(ROLES.BUYER), (_req, _res, next) => next(ApiError.locked(CPAPO_MESSAGE, { code: 'CPAPO_SPEC_LOCK' })));
 router.patch('/:id', authorize(ROLES.BUYER), (_req, _res, next) => next(ApiError.locked(CPAPO_MESSAGE, { code: 'CPAPO_SPEC_LOCK' })));

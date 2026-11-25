@@ -1,25 +1,34 @@
 /**
  * Module 1 + Module 2: RFQ lifecycle and the real-time reverse auction engine.
  */
-const { User, RFQ, Bid } = require('../models');
+const { User, RFQ, Bid, Order } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { config } = require('../config/env');
-const { ROLES, RFQ_STATUS, BID_STATUS, AUCTION } = require('../config/constants');
+const { ROLES, RFQ_STATUS, BID_STATUS, AUCTION, VENDOR_STATUS } = require('../config/constants');
 const { generateCode, roundMoney, idEquals, assertObjectId } = require('../utils/helpers');
 const { buildDesignSpecs, calculateExpectedDeliveryDays } = require('../utils/rfqCalculator');
 const { scoreBids, computePriceDiagnostic } = require('./scoringEngine');
 const { auctionMutex } = require('../utils/keyedMutex');
 const { maskContactInfo } = require('../utils/contactFilter');
 const realtime = require('./realtime');
+const { vendorOrderStats, EMPTY_VENDOR_STATS } = require('./vendorStats');
 
-const VENDOR_PUBLIC_FIELDS = 'name companyName skillBadges trustScore ratingCount';
+// Fields of a bidding vendor the RFQ owner (and admins) may see. Never contact details.
+const VENDOR_PUBLIC_FIELDS = 'name companyName skillBadges trustScore ratingCount vendorStatus isVerified';
+
+/** KYB-verified: approved through KYB (or grandfathered) and currently verified by an administrator. */
+const isKybVerified = (vendor) => Boolean(vendor && vendor.vendorStatus === VENDOR_STATUS.APPROVED && vendor.isVerified === true);
 
 // ───────────────────────────────────────────────────────────────────────────
 // View builders (Rank-Based Partial Visibility)
 // ───────────────────────────────────────────────────────────────────────────
 
-/** Full ranked leaderboard - buyer (owner) and admin only. */
-function buildLeaderboard(bids) {
+/**
+ * Full ranked leaderboard - buyer (owner) and admin only. EVERY bid on the RFQ is returned (no truncation).
+ * Ranking is the multi-attribute score (scoringEngine.scoreBids), unchanged. `statsByVendor` adds each
+ * vendor's order history (see vendorStats.js); without it the counts are zero.
+ */
+function buildLeaderboard(bids, statsByVendor = new Map()) {
   const scored = scoreBids(
     bids.map((b) => ({
       id: String(b._id),
@@ -33,24 +42,35 @@ function buildLeaderboard(bids) {
   return scored.map((s) => {
     const bid = byId.get(s.id);
     const vendor = bid.vendorId && bid.vendorId._id ? bid.vendorId : null;
+    const vendorId = vendor ? String(vendor._id) : String(bid.vendorId);
+    const companyName = bid.companyName || (vendor && vendor.companyName) || '';
+    const stats = statsByVendor.get(vendorId) || EMPTY_VENDOR_STATS;
     return {
       bidId: s.id,
       rank: s.rank,
       score: s.score,
       scoreBreakdown: s.breakdown,
-      vendorId: vendor ? String(vendor._id) : String(bid.vendorId),
+      vendorId,
       vendorName: bid.vendorName,
-      companyName: bid.companyName || (vendor && vendor.companyName) || '',
+      companyName,
+      businessName: companyName || bid.vendorName,
+      kybVerified: isKybVerified(vendor),
       skillBadges: vendor ? vendor.skillBadges : [],
+      // trustScore is the snapshot the score was computed with; currentTrustScore is the live value.
       trustScore: bid.trustScoreSnapshot,
       currentTrustScore: vendor ? vendor.trustScore : bid.trustScoreSnapshot,
-      ratingCount: vendor ? vendor.ratingCount : 0,
+      ratingCount: vendor ? vendor.ratingCount || 0 : 0,
+      reviewCount: vendor ? vendor.ratingCount || 0 : 0,
+      totalOrders: stats.totalOrders,
+      completedOrders: stats.completedOrders,
+      completionRate: stats.completionRate,
       price: bid.price,
       unitPrice: bid.unitPrice,
       leadTimeDays: bid.leadTimeDays,
       notes: bid.notes,
       status: bid.status,
       revisionCount: bid.revisionCount,
+      submittedAt: bid.lastSubmittedAt,
       lastSubmittedAt: bid.lastSubmittedAt,
     };
   });
@@ -111,6 +131,12 @@ async function loadBidsWithVendors(rfqId) {
   return Bid.find({ rfqId }).populate('vendorId', VENDOR_PUBLIC_FIELDS);
 }
 
+/** Leaderboard with every bidder's order history: one aggregation for all vendors on it. */
+async function buildBuyerLeaderboard(bids) {
+  const stats = await vendorOrderStats(bids.map((b) => (b.vendorId && b.vendorId._id) || b.vendorId));
+  return buildLeaderboard(bids, stats);
+}
+
 /**
  * Role-aware auction snapshot used by REST (GET /api/rfqs/:id) and Socket.IO (rfq:join).
  * Enforces access: buyer owner, admin, or a vendor who is eligible / already bid.
@@ -123,7 +149,7 @@ async function getAuctionSnapshot(rfqOrId, user) {
     return {
       viewer: user.role,
       rfq: ownerRfqView(rfq),
-      leaderboard: buildLeaderboard(bids),
+      leaderboard: await buildBuyerLeaderboard(bids),
       priceDiagnostic: rfq.priceDiagnostic,
     };
   }
@@ -157,6 +183,58 @@ async function findRfqOr404(rfqId) {
   const rfq = await RFQ.findById(rfqId);
   if (!rfq) throw ApiError.notFound('RFQ not found');
   return rfq;
+}
+
+/**
+ * GET /api/rfqs/:id/vendors/:vendorId - credibility profile of a vendor who bid on this RFQ, for the
+ * RFQ owner (or an admin) comparing bids. Scoped to bidders of this RFQ, so it cannot be used to browse
+ * vendors. Returns order history, KYB status, trust and recent reviews (anonymous, contact details were
+ * masked when written). Never phone, e-mail, business registration number or links.
+ */
+async function getBidderProfile(rfqId, vendorId, user) {
+  const rfq = await findRfqOr404(rfqId);
+  assertObjectId(vendorId, 'vendor id');
+  if (!(user.role === ROLES.ADMIN || (user.role === ROLES.BUYER && idEquals(rfq.buyerId, user._id)))) {
+    throw ApiError.forbidden('Only the buyer who owns this RFQ can view its bidders');
+  }
+  const bid = await Bid.findOne({ rfqId: rfq._id, vendorId }).select('_id');
+  if (!bid) throw ApiError.notFound('This vendor has not bid on this RFQ');
+
+  const [vendor, stats, reviews] = await Promise.all([
+    User.findById(vendorId).select(`${VENDOR_PUBLIC_FIELDS} capabilities maxCapacity createdAt storefront.bio storefront.coverUrl role isActive licenseExpiryDate`),
+    vendorOrderStats([vendorId]),
+    Order.find({ vendorId, 'buyerRating.rating': { $gte: 1 } })
+      .sort({ 'buyerRating.ratedAt': -1 })
+      .limit(10)
+      .select('buyerRating.rating buyerRating.review buyerRating.ratedAt specSnapshot.garmentType specSnapshot.printType specSnapshot.totalQuantity')
+      .lean(),
+  ]);
+  if (!vendor || vendor.role !== ROLES.VENDOR) throw ApiError.notFound('Vendor not found');
+
+  return {
+    vendorId: String(vendor._id),
+    businessName: vendor.companyName || vendor.name,
+    kybVerified: isKybVerified(vendor),
+    // The full storefront page is only available while the vendor passes the PERA qualification lock.
+    storefrontAvailable: vendor.isPrequalified,
+    trustScore: vendor.trustScore,
+    reviewCount: vendor.ratingCount || 0,
+    skillBadges: vendor.skillBadges || [],
+    capabilities: vendor.capabilities || [],
+    maxCapacity: vendor.maxCapacity || 0,
+    memberSince: vendor.createdAt,
+    bio: vendor.storefront?.bio || '',
+    coverUrl: vendor.storefront?.coverUrl || '',
+    ...(stats.get(String(vendor._id)) || EMPTY_VENDOR_STATS),
+    reviews: reviews.map((o) => ({
+      rating: o.buyerRating.rating,
+      review: o.buyerRating.review || '',
+      ratedAt: o.buyerRating.ratedAt,
+      garmentType: o.specSnapshot?.garmentType || null,
+      printType: o.specSnapshot?.printType || null,
+      quantity: o.specSnapshot?.totalQuantity || null,
+    })),
+  };
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -357,10 +435,13 @@ async function recomputeRankings(rfq) {
   return { bids, diagnostic };
 }
 
-/** Pushes role-appropriate state to every party. Leaderboard NEVER goes to the shared rfq room. */
-function broadcastAuctionState(rfq, bids) {
+/**
+ * Pushes role-appropriate state to every party. The leaderboard goes ONLY to the RFQ owner and admins,
+ * never to the shared rfq room; each vendor gets their own bid and rank (buildVendorBidView) and nothing else.
+ */
+async function broadcastAuctionState(rfq, bids) {
   const rfqId = String(rfq._id);
-  const leaderboard = buildLeaderboard(bids);
+  const leaderboard = await buildBuyerLeaderboard(bids);
   const ownerPayload = {
     rfqId,
     rfqCode: rfq.rfqCode,
@@ -483,7 +564,7 @@ async function placeBid(vendorId, rfqId, input) {
     }
 
     const { bids } = await recomputeRankings(rfq);
-    broadcastAuctionState(rfq, bids);
+    await broadcastAuctionState(rfq, bids);
 
     if (extended) {
       const extensionPayload = {
@@ -525,7 +606,7 @@ async function closeExpiredAuctions() {
       await rfq.save();
 
       const bids = await loadBidsWithVendors(rfq._id);
-      broadcastAuctionState(rfq, bids);
+      await broadcastAuctionState(rfq, bids);
       const payload = {
         rfqId: String(rfq._id),
         rfqCode: rfq.rfqCode,
@@ -570,6 +651,9 @@ async function settleBidsForAward(rfqId, winningBidId) {
 
 module.exports = {
   buildLeaderboard,
+  buildBuyerLeaderboard,
+  getBidderProfile,
+  isKybVerified,
   buildVendorBidView,
   publicRfqView,
   ownerRfqView,

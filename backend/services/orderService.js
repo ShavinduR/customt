@@ -175,7 +175,7 @@ async function acceptBid(buyer, rfqId, bidId) {
 
     await auctionService.settleBidsForAward(rfq._id, bid._id);
     const bids = await auctionService.loadBidsWithVendors(rfq._id);
-    auctionService.broadcastAuctionState(rfq, bids);
+    await auctionService.broadcastAuctionState(rfq, bids);
 
     const base = { rfqId: String(rfq._id), rfqCode: rfq.rfqCode, status: rfq.status };
     realtime.emitToUser(vendor._id, 'auction:awarded', {
