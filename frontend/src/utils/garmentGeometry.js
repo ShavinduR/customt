@@ -81,8 +81,8 @@ export const OPEN_SEGMENTS = {
   'Long Sleeve Shirt': [1, 7, 12, 17],
 };
 
-export const SIDES = ['front', 'back', 'leftSleeve', 'rightSleeve'];
-export const SIDE_LABEL = { front: 'Front', back: 'Back', leftSleeve: 'Left sleeve', rightSleeve: 'Right sleeve' };
+export const SIDES = ['front', 'back', 'leftSleeve', 'rightSleeve', 'insideLabel'];
+export const SIDE_LABEL = { front: 'Front', back: 'Back', leftSleeve: 'Left sleeve', rightSleeve: 'Right sleeve', insideLabel: 'Inside label' };
 
 /**
  * Printable areas: centre, size and rotation (degrees, clockwise). Layer positions are percentages of
@@ -142,11 +142,36 @@ const BODY_AREAS = {
 };
 RAW_PRINT_AREAS['V-Neck'] = RAW_PRINT_AREAS['Crew Neck'];
 BODY_AREAS['V-Neck'] = BODY_AREAS['Crew Neck'];
+/**
+ * Inside label: printed on the inside of the back, under the back neck seam (a tagless "neck label").
+ * 8 × 7 cm, top edge 1.5 cm below the neck seam at the centre back. NECK_SEAM_Y is that seam's lowest
+ * point (centre back) on the back face.
+ */
+export const NECK_SEAM_Y = { 'Crew Neck': 37, 'V-Neck': 37, Polo: 36, Hoodie: 40, 'Short Sleeve Shirt': 36, 'Long Sleeve Shirt': 36 };
+export const LABEL_SIZE_CM = { w: 8, h: 7 };
+const labelArea = (garment) => bodyArea(NECK_SEAM_Y[garment] + (1.5 + LABEL_SIZE_CM.h / 2) * UNITS_PER_CM, LABEL_SIZE_CM.w, LABEL_SIZE_CM.h);
 export const PRINT_AREAS = mapObject(RAW_PRINT_AREAS, (areas, garment) => ({
   ...BODY_AREAS[garment],
   leftSleeve: transformArea(areas.leftSleeve),
   rightSleeve: transformArea(areas.rightSleeve),
+  insideLabel: labelArea(garment),
 }));
+
+/**
+ * Trim pieces cut from rib or collar knit, shown on the pattern sheet (size M, finished sizes).
+ * They are not printed; the spec sheet lists them so the printer can match the colour.
+ */
+export const TRIMS = {
+  'Crew Neck': [{ id: 'neckRib', label: 'Neck rib', lengthCm: 42, widthCm: 4.5, cut: 1, fold: true, note: 'Rib knit, folded lengthwise' }],
+  'V-Neck': [{ id: 'neckRib', label: 'Neck rib', lengthCm: 50, widthCm: 4.5, cut: 1, fold: true, note: 'Rib knit, folded lengthwise, mitred at the V' }],
+  Polo: [{ id: 'collar', label: 'Collar', lengthCm: 40, widthCm: 8, cut: 1, fold: false, note: 'Flat knit collar' }],
+  Hoodie: [
+    { id: 'waistband', label: 'Waistband rib', lengthCm: 88, widthCm: 14, cut: 1, fold: true, note: 'Rib knit, folded lengthwise' },
+    { id: 'cuff', label: 'Cuff rib', lengthCm: 21, widthCm: 14, cut: 2, fold: true, note: 'Rib knit, folded lengthwise' },
+  ],
+  'Short Sleeve Shirt': [{ id: 'collar', label: 'Collar', lengthCm: 42, widthCm: 9, cut: 2, fold: false, note: 'Woven, with interlining' }],
+  'Long Sleeve Shirt': [{ id: 'collar', label: 'Collar', lengthCm: 42, widthCm: 9, cut: 2, fold: false, note: 'Woven, with interlining' }],
+};
 
 /**
  * Pattern (cut-piece) geometry, for the image-RIGHT half of each garment (the wearer's left sleeve);
@@ -217,8 +242,11 @@ const armholeSeam = (g) => {
   return `M${q(p0)} C${q(c1)} ${q(c2)} ${q(p3)} M${m(p0)} C${m(c1)} ${m(c2)} ${m(p3)}`;
 };
 
-/** Which flat view a side is drawn on (sleeve prints live on the front face). */
-export const SIDE_FACE = { front: 'front', back: 'back', leftSleeve: 'front', rightSleeve: 'front' };
+/**
+ * Which flat view a side is drawn on (sleeve prints live on the front face). The inside label has its own
+ * 'inside' view (the inside of the back), so it never shows on the outside, in 3D or on the photo view.
+ */
+export const SIDE_FACE = { front: 'front', back: 'back', leftSleeve: 'front', rightSleeve: 'front', insideLabel: 'inside' };
 
 /**
  * Construction details drawn over the base colour. Colours are brightness shifts of the base colour

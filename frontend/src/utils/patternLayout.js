@@ -9,12 +9,14 @@
  *   Sleeve piece = the sleeve's front half (from the front face) + its back half (from the back face),
  *                  unfolded about the sleeve's outer fold line so the cap is at the top and the cuff at
  *                  the bottom, like a real sleeve pattern.
+ *   Third row    = the inside label (a window onto the inside of the back neck, where it is printed) and the
+ *                  trim pieces (neck rib or collar, hoodie waistband and cuffs), drawn at their cut size.
  *
  * Every half is an affine map (SVG matrix) from face coordinates to layout coordinates, so the editor can
  * draw it with a transform and drag maths keeps working through getScreenCTM().
  * Affine maps are [a, b, c, d, e, f]: x' = a·x + c·y + e, y' = b·x + d·y + f (SVG matrix order).
  */
-import { ARMHOLE, BODY, HEM_CORNER, SLEEVE_FOLD, VIEW_W } from './garmentGeometry.js';
+import { ARMHOLE, BODY, HEM_CORNER, HPS_Y, PRINT_AREAS, SLEEVE_FOLD, TRIMS, UNITS_PER_CM, VIEW_W } from './garmentGeometry.js';
 
 const IDENTITY = [1, 0, 0, 1, 0, 0];
 const MIRROR = [-1, 0, 0, 1, VIEW_W, 0]; // left ↔ right half of a face
@@ -184,13 +186,28 @@ export function patternLayout(garment) {
     piece.rect = { x: piece.box.x + dx, y: piece.box.y + dy, w: piece.box.w, h: piece.box.h };
   }
 
+  // Third row: inside label window, then the trims, left to right.
+  const area = PRINT_AREAS[g].insideLabel;
+  const crop = { x: VIEW_W / 2 - 66, y: HPS_Y[g] - 6, w: 132, h: area.cy + area.h / 2 + 14 - (HPS_Y[g] - 6) };
+  const row3 = [{ kind: 'label', side: 'insideLabel', label: 'Inside label', w: crop.w, h: crop.h, crop }];
+  for (const t of TRIMS[g] || []) row3.push({ kind: 'trim', ...t, w: t.lengthCm * UNITS_PER_CM, h: t.widthCm * UNITS_PER_CM });
+  const y3 = rowY[1] + rowH[1] + LABEL + GAP;
+  const row3H = Math.max(...row3.map((e) => e.h));
+  let x3 = MARGIN;
+  const extras = row3.map((e) => {
+    const rect = { x: x3, y: y3 + (row3H - e.h) / 2, w: e.w, h: e.h };
+    x3 += e.w + GAP;
+    return e.kind === 'label' ? { ...e, rect, m: translate(rect.x - e.crop.x, rect.y - e.crop.y) } : { ...e, rect };
+  });
+
   return {
     garment: g,
     pieces,
+    extras,
     regions,
     // Ruler zero: top-left corner of the piece area.
     origin: { x: MARGIN, y: MARGIN },
-    width: MARGIN * 2 + col[0] + GAP + col[1],
-    height: rowY[1] + rowH[1] + LABEL + MARGIN,
+    width: Math.max(MARGIN * 2 + col[0] + GAP + col[1], x3 - GAP + MARGIN),
+    height: y3 + row3H + LABEL + MARGIN,
   };
 }

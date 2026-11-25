@@ -117,3 +117,15 @@ test('the V-neck T-shirt is a supported garment with the T-shirt delivery time',
   assert.equal(vneck.garmentType, 'V-Neck');
   assert.equal(calculateExpectedDeliveryDays(vneck), calculateExpectedDeliveryDays(crew));
 });
+
+test('the inside label is a print side of its own and adds a printed side to the delivery time', () => {
+  const withLabel = buildDesignSpecs({
+    ...base,
+    textLayers: [text(), text({ id: 't2', side: 'insideLabel', text: 'ACME', size: 8 })],
+    imageLayers: [image({ id: 'i2', side: 'insideLabel', scale: 0.6 })],
+  });
+  const without = buildDesignSpecs({ ...base, textLayers: [text()], imageLayers: [] });
+  assert.deepEqual(withLabel.printedSides, ['front', 'insideLabel']);
+  assert.equal(withLabel.imageLayers[0].side, 'insideLabel');
+  assert.equal(calculateExpectedDeliveryDays(withLabel) - calculateExpectedDeliveryDays(without), 1);
+});

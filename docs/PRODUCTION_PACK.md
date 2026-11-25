@@ -25,6 +25,7 @@ Warnings appear in the studio (*Order* tab → *Print check*; *Artwork* tab → 
 `buildSpecSheet(specs, meta)` produces an A4 PDF with jsPDF. It contains:
 
 - garment, fabric/GSM, print method, quantity, printed sides, delivery, base colour swatch;
+- the **trims** at cut size (neck rib, collar, hoodie waistband and cuffs), to be matched to the base colour;
 - **front and back flat views**, cut from the same texture that paints the 3D model;
 - the size breakdown;
 - for every printed side:
@@ -34,6 +35,13 @@ Warnings appear in the studio (*Order* tab → *Print check*; *Artwork* tab → 
 - the buyer's notes.
 
 Every bidder quotes on the same measured facts, which is meant to narrow the price spread between bids (the CV diagnostic in the auction).
+
+## Inside label
+
+The **inside label** is a print side of its own: an 8 × 7 cm area printed on the inside of the back, with its top edge 1.5 cm below the neck seam (a tagless brand label).
+- In the studio it has its own **Label** view (the inside of the back neck), and a window on the pattern sheet. A **Neck label** placement preset puts a logo there at 6 cm wide.
+- It never shows on the outside: not in the 3D model, the photo preview or the front/back views. On the back pattern piece a dashed box marks where it goes.
+- It counts as a printed side (one more production day, its own print file), and the spec sheet says it is printed inside.
 
 ## Print files
 `renderPrintFile(specs, side)`:

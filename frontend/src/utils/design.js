@@ -4,7 +4,7 @@
  * textLayer:  { id, side, text, font, size, color, x, y, rotation }   x/y = % of the side's print area
  * imageLayer: { id, side, url, x, y, scale, rotation }                scale = width as a fraction of the print area
  * rotation: degrees clockwise around the layer's centre, -180…180 (missing = 0)
- * side: 'front' | 'back' | 'leftSleeve' | 'rightSleeve'
+ * side: 'front' | 'back' | 'leftSleeve' | 'rightSleeve' | 'insideLabel'
  */
 import { SIDES } from './garmentGeometry.js';
 
@@ -48,7 +48,9 @@ export const normRotation = (deg) => {
 export const newLayerId = (prefix) => `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
 /** Default text size per side (sleeves are small). */
-export const defaultTextSize = (side) => (side === 'leftSleeve' || side === 'rightSleeve' ? 10 : 28);
+/** Sleeves and the inside label are small print areas: smaller default text and bigger default images. */
+export const isSmallSide = (side) => side === 'leftSleeve' || side === 'rightSleeve' || side === 'insideLabel';
+export const defaultTextSize = (side) => (side === 'insideLabel' ? 8 : isSmallSide(side) ? 10 : 28);
 
 /**
  * Returns the layers of a design. Older designs (single text + logo) are converted the same way the

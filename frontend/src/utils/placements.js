@@ -23,12 +23,14 @@ const COMMON = [
   { id: 'full-back', label: 'Full back', hint: 'Largest back print', side: 'back', width: 30 },
   { id: 'left-sleeve', label: 'Left sleeve', hint: 'Small logo or number', side: 'leftSleeve', width: 7 },
   { id: 'right-sleeve', label: 'Right sleeve', hint: 'Small logo or number', side: 'rightSleeve', width: 7 },
+  { id: 'neck-label', label: 'Neck label', hint: 'Your brand inside the back neck', side: 'insideLabel', width: 6 },
 ];
 
 export const PLACEMENT_GROUPS = [
   { side: 'front', label: 'Front' },
   { side: 'back', label: 'Back' },
   { side: 'sleeves', label: 'Sleeves' },
+  { side: 'insideLabel', label: 'Inside' },
 ];
 
 const isShirt = (g) => g === 'Short Sleeve Shirt' || g === 'Long Sleeve Shirt';
