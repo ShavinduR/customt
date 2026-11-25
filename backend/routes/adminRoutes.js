@@ -9,6 +9,7 @@ const auctionService = require('../services/auctionService');
 const orderService = require('../services/orderService');
 const realtime = require('../services/realtime');
 const chatService = require('../services/chatService');
+const { vendorOrderStats } = require('../services/vendorStats');
 
 const router = express.Router();
 router.use(protect, authorize(ROLES.ADMIN));
@@ -156,15 +157,17 @@ router.get(
   '/auctions/live',
   asyncHandler(async (_req, res) => {
     const rfqs = await RFQ.find({ status: RFQ_STATUS.OPEN }).sort({ expiresAt: 1 }).populate('buyerId', 'name email');
-    const bids = await Bid.find({ rfqId: { $in: rfqs.map((r) => r._id) } }).populate('vendorId', 'name companyName skillBadges trustScore ratingCount');
+    const bids = await Bid.find({ rfqId: { $in: rfqs.map((r) => r._id) } }).populate('vendorId', 'name companyName skillBadges trustScore ratingCount vendorStatus isVerified');
     const bidsByRfq = bids.reduce((acc, b) => {
       const key = String(b.rfqId);
       (acc[key] = acc[key] || []).push(b);
       return acc;
     }, {});
+    // One aggregation for every vendor across all live auctions (no per-row queries).
+    const stats = await vendorOrderStats(bids.map((b) => (b.vendorId && b.vendorId._id) || b.vendorId));
     const items = rfqs.map((rfq) => ({
       rfq: auctionService.ownerRfqView(rfq),
-      leaderboard: auctionService.buildLeaderboard(bidsByRfq[String(rfq._id)] || []),
+      leaderboard: auctionService.buildLeaderboard(bidsByRfq[String(rfq._id)] || [], stats),
       priceDiagnostic: rfq.priceDiagnostic,
     }));
     res.json({ success: true, items });

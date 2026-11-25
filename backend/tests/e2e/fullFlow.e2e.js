@@ -315,6 +315,24 @@ test('socket bids are scored with the multi-attribute formula and ranked live', 
 
   const buyerView = await ok('GET', `/rfqs/${S.rfq._id}`, S.buyer);
   assert.equal(buyerView.leaderboard.length, 2);
+
+  // Hybrid comparison: the owner's leaderboard carries every bidder's credibility figures (REST and socket).
+  const COMPARE = ['vendorId', 'businessName', 'kybVerified', 'trustScore', 'reviewCount', 'totalOrders', 'completedOrders', 'price', 'unitPrice', 'leadTimeDays', 'notes', 'score', 'rank', 'submittedAt'];
+  for (const e of [...buyerView.leaderboard, ...lb.leaderboard]) {
+    COMPARE.forEach((k) => assert.ok(k in e, `buyer leaderboard entry has ${k}`));
+    assert.equal(e.kybVerified, true);
+    assert.equal(e.totalOrders, 0);
+    assert.equal(e.completedOrders, 0);
+    assert.equal(e.phone, undefined);
+    assert.equal(e.email, undefined);
+  }
+  // ...and none of it ever reaches a vendor.
+  for (const key of ['totalOrders', 'completedOrders', 'businessName', 'kybVerified', 'reviewCount', 'leaderboard']) {
+    for (const s of [S.sV1, S.sV2, S.sV4]) assert.equal(valuesOf(s, key).length, 0, `vendors never receive ${key}`);
+    assert.equal(vendorView[key], undefined);
+  }
+  const peek = await api('GET', `/rfqs/${S.rfq._id}/vendors/${S.v2.id}`, S.v1.token);
+  assert.equal(peek.status, 403, 'a vendor cannot open a competitor profile through the RFQ');
 });
 
 // ── 7. Multi-round re-bidding rules ──────────────────────────────────────────────────────
@@ -522,6 +540,45 @@ test('admin analytics reflect the run', async () => {
   assert.ok(a.auctionEfficiency.highVarianceRfqCount >= 1);
   assert.ok(a.auctionEfficiency.avgPriceDiscoverySavingsPct > 0);
   assert.equal(a.quality.ratingsCount, 1);
+});
+
+// ── 17b. Hybrid comparison: bidder order history, reviews and profile ──────────────────
+test('hybrid comparison: the buyer sees every bidder with order history and reviews; vendors and outsiders do not', async () => {
+  const view = await ok('GET', `/rfqs/${S.rfq._id}`, S.buyer);
+  assert.equal(view.leaderboard.length, 3, 'all bids are returned, not only the top one');
+  const by = Object.fromEntries(view.leaderboard.map((e) => [e.vendorId, e]));
+  // Bravo won this RFQ and completed it with O2O; Alpha's dispute order ended in a split (COMPLETED).
+  assert.deepEqual([by[S.v2.id].totalOrders, by[S.v2.id].completedOrders, by[S.v2.id].completionRate], [1, 1, 1]);
+  assert.deepEqual([by[S.v1.id].totalOrders, by[S.v1.id].completedOrders], [1, 1]);
+  assert.deepEqual([by[S.v4.id].totalOrders, by[S.v4.id].completedOrders, by[S.v4.id].completionRate], [0, 0, null]);
+  assert.equal(by[S.v2.id].reviewCount, 1);
+  assert.equal(by[S.v2.id].currentTrustScore, 3.95);
+  // The ranking is still the multi-attribute score: ranks are 1..n in score order.
+  const ranked = [...view.leaderboard].sort((a, b) => a.rank - b.rank);
+  ranked.forEach((e, i) => {
+    assert.equal(e.rank, i + 1);
+    if (i) assert.ok(ranked[i - 1].score >= e.score);
+  });
+
+  const profile = (await ok('GET', `/rfqs/${S.rfq._id}/vendors/${S.v2.id}`, S.buyer)).profile;
+  assert.equal(profile.businessName, 'Bravo Prints');
+  assert.equal(profile.kybVerified, true);
+  assert.deepEqual([profile.totalOrders, profile.completedOrders, profile.completionRate, profile.reviewCount], [1, 1, 1, 1]);
+  assert.equal(profile.reviews[0].rating, 5);
+  assert.equal(profile.reviews[0].review, 'Great print quality');
+  const raw = JSON.stringify(profile);
+  for (const secret of ['+94770000000', 'e2e.test', 'PV-', 'businessRegNo', 'walletBalance', 'buyerId']) assert.ok(!raw.includes(secret), `profile must not include ${secret}`);
+
+  assert.equal((await api('GET', `/rfqs/${S.rfq._id}/vendors/${S.v2.id}`, S.admin)).status, 200);
+  assert.equal((await api('GET', `/rfqs/${S.rfq._id}/vendors/${S.v3.id}`, S.buyer)).status, 404, 'only vendors who bid on this RFQ');
+  assert.equal((await api('GET', `/rfqs/${S.rfq._id}/vendors/${S.v2.id}`, S.v4.token)).status, 403);
+  const other = await ok('POST', '/auth/register', null, { name: 'Other Buyer', email: 'other-buyer@e2e.test', password: 'Buyer12345', phone: '+94771112223' });
+  assert.equal((await api('GET', `/rfqs/${S.rfq._id}/vendors/${S.v2.id}`, other.token)).status, 403, 'another buyer cannot view this RFQ\'s bidders');
+
+  const vendorView = await ok('GET', `/rfqs/${S.rfq._id}`, S.v4.token);
+  assert.equal(vendorView.leaderboard, undefined);
+  assert.equal(vendorView.totalOrders, undefined);
+  assert.deepEqual(Object.keys(vendorView.myBid).sort(), ['bidId', 'lastSubmittedAt', 'leadTimeDays', 'notes', 'price', 'revisionCount', 'revisions', 'status', 'unitPrice']);
 });
 
 // ── 18. Buyer-vendor chat with contact filtering ─────────────────────────────────────────

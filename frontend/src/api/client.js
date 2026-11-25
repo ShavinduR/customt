@@ -107,6 +107,8 @@ export const rfqApi = {
   cancel: (id, reason) => unwrap(http.post(`/rfqs/${id}/cancel`, { reason })),
   acceptBid: (id, bidId) => unwrap(http.post(`/rfqs/${id}/bids/${bidId}/accept`)),
   placeBid: (id, payload) => unwrap(http.post(`/rfqs/${id}/bids`, payload)),
+  /** Bidder credibility profile (RFQ owner / admin only): order history, KYB status, anonymous reviews. */
+  bidderProfile: (id, vendorId) => unwrap(http.get(`/rfqs/${id}/vendors/${vendorId}`)),
 };
 
 export const orderApi = {
