@@ -14,6 +14,7 @@
  * Nothing here carries contact details: it is safe to show to the buyer who owns the RFQ (and admins).
  * Vendors never receive these figures for their competitors.
  */
+const mongoose = require('mongoose');
 const { Order } = require('../models');
 const { ORDER_STATUS } = require('../config/constants');
 
@@ -32,7 +33,10 @@ function finalise({ totalOrders = 0, completedOrders = 0, refundedOrders = 0 } =
 
 /** @returns {Promise<Map<string, typeof EMPTY>>} stats per vendor id (every requested id is present). */
 async function vendorOrderStats(vendorIds) {
-  const ids = [...new Map(vendorIds.filter(Boolean).map((id) => [String(id._id || id), id._id || id])).values()];
+  // Aggregations don't cast like find() does, so string ids (e.g. from a URL) must become ObjectIds.
+  const ids = [...new Set(vendorIds.filter(Boolean).map((id) => String(id._id || id)))]
+    .filter((id) => mongoose.Types.ObjectId.isValid(id))
+    .map((id) => new mongoose.Types.ObjectId(id));
   const stats = new Map(ids.map((id) => [String(id), { ...EMPTY }]));
   if (!ids.length) return stats;
 
